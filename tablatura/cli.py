@@ -13,6 +13,7 @@ from pathlib import Path
 from .diteggiatura import diteggia, fuori_estensione
 from .disegno import a_proporzione, disegna_battute, in_griglia
 from .ostinato import analizza, riassunto
+from .ottava import da_file, sposta
 from .pulizia import ripulisci
 from .separa import TRACCIA, separa
 from .strumenti import STRUMENTI
@@ -32,6 +33,9 @@ def argomenti(righe: list[str] | None = None) -> argparse.Namespace:
     lettore.add_argument("--dove", type=Path, help="cartella dei risultati (default: accanto alla canzone)")
     lettore.add_argument("--bpm", type=float, help="il metronomo, se lo sai; altrimenti lo cerca da solo")
     lettore.add_argument("--partenza", type=float, help="secondo in cui cade il primo movimento")
+    lettore.add_argument(
+        "--ottava", type=int, help="sposta la linea di tante ottave, invece di indovinarle"
+    )
     lettore.add_argument("--tutto", action="store_true", help="stampa tutte le battute, anche se il giro si ripete")
     lettore.add_argument("--senza-battute", action="store_true", help="niente griglia: spazio in proporzione al tempo")
     lettore.add_argument("--polifonico", action="store_true", help="tiene gli accordi (per la chitarra)")
@@ -76,6 +80,17 @@ def main(righe: list[str] | None = None) -> int:
     grezze = trascrivi(isolata, strumento)
     note = ripulisci(grezze, una_nota_alla_volta=not opzioni.polifonico)
     print(f"  {len(grezze)} note grezze → {len(note)} dopo la pulizia")
+
+    if opzioni.ottava:
+        note = sposta(note, opzioni.ottava)
+        print(f"  linea spostata di {opzioni.ottava:+d} ottave, come chiesto")
+    elif note and opzioni.ottava is None:
+        # La fondamentale di un basso è debole: il trascrittore si aggancia
+        # spesso alla seconda armonica e scrive tutto un'ottava sopra.
+        ottave = da_file(isolata, note, strumento)
+        if ottave:
+            note = sposta(note, ottave)
+            print("  le armoniche dicono che era scritta un'ottava sopra: abbassata")
 
     if bpm and opzioni.bpm is None and note:
         from .metronomo import affina
