@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -157,16 +158,20 @@ def main(righe: list[str] | None = None) -> int:
     testo.write_text(f"{opzioni.canzone.stem} — {strumento.nome}\n\n{tab}\n", encoding="utf-8")
 
     if bpm:
+        # Lo stesso contenuto della pagina, in un file che il leggio sul web
+        # sa leggere: il lavoro pesante resta qui, la lettura va dove serve.
+        descrizione = dati(suonate, strumento, bpm=bpm, partenza=partenza, parole=dette)
+        (dove / "leggio.json").write_text(json.dumps(descrizione), encoding="utf-8")
         pagina = dove / "tablatura.html"
         scrivi(
             pagina,
             titolo=opzioni.canzone.stem,
             strumento=strumento,
             bpm=bpm,
-            tab=dati(suonate, strumento, bpm=bpm, partenza=partenza, parole=dette),
+            tab=descrizione,
             tracce=[{"nome": nome, "file": file.name} for nome, file in sorted(tracce.items())],
         )
-        print(f"\ntablatura: {testo}\npagina:    {pagina}")
+        print(f"\ntablatura: {testo}\npagina:    {pagina}\nleggio:    {dove / 'leggio.json'}")
     else:
         print(f"\ntablatura: {testo}")
     return 0

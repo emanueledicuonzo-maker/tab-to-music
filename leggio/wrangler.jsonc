@@ -1,0 +1,7 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "leggio",
+  "compatibility_date": "2026-09-08",
+  "account_id": "505e920da160766cd7f593334dbd65ac",
+  "assets": { "directory": "./public" }
+}
