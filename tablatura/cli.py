@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 from .diteggiatura import diteggia, fuori_estensione
-from .disegno import a_proporzione, disegna_battute, in_griglia
+from .disegno import a_proporzione, allinea_partenza, disegna_battute, in_griglia
 from .ostinato import analizza, riassunto
 from .ottava import da_file, sposta
 from .pulizia import ripulisci
@@ -36,6 +36,8 @@ def argomenti(righe: list[str] | None = None) -> argparse.Namespace:
     lettore.add_argument(
         "--ottava", type=int, help="sposta la linea di tante ottave, invece di indovinarle"
     )
+    lettore.add_argument("--testo", action="store_true", help="trascrive anche il testo cantato")
+    lettore.add_argument("--lingua", help="lingua del testo in codice ISO (it, en): evita che la indovini male")
     lettore.add_argument("--tutto", action="store_true", help="stampa tutte le battute, anche se il giro si ripete")
     lettore.add_argument("--senza-battute", action="store_true", help="niente griglia: spazio in proporzione al tempo")
     lettore.add_argument("--polifonico", action="store_true", help="tiene gli accordi (per la chitarra)")
@@ -107,14 +109,36 @@ def main(righe: list[str] | None = None) -> int:
         print("non è uscita nessuna nota: prova un altro strumento o un'altra traccia", file=sys.stderr)
         return 1
 
+    dette = []
+    if opzioni.testo and bpm:
+        voce = tracce.get("vocals")
+        if voce is None:
+            print("  senza la traccia della voce il testo non si può trascrivere")
+        else:
+            from .testo import ascolta
+
+            print("trascrivo il testo (la prima volta scarica il modello)…")
+            dette = ascolta(voce, opzioni.lingua)
+            print(f"  {len(dette)} parole")
+
     print()
     if opzioni.senza_battute or not bpm:
         tab = a_proporzione(suonate, strumento)
         print(tab)
     else:
+        # Le parole vanno incasellate sulla stessa griglia delle note, quindi
+        # la partenza si allinea una volta sola e la usano tutti e due.
+        partenza = allinea_partenza(partenza, min(s.nota.inizio for s in suonate), bpm)
         battute = in_griglia(suonate, bpm, partenza=partenza)
-        tab = disegna_battute(battute, strumento)
-        trovato = None if opzioni.tutto else analizza(battute)
+        parole = {}
+        if dette:
+            from .testo import in_celle
+
+            parole = in_celle(dette, bpm, partenza=partenza)
+        tab = disegna_battute(battute, strumento, parole=parole)
+        # Col testo si stampa tutto: le parole servono proprio a distinguere
+        # una ripetizione dall'altra, e il giro accorpato le butterebbe via.
+        trovato = None if (opzioni.tutto or parole) else analizza(battute)
         if trovato is None:
             print(tab)
         else:
@@ -139,7 +163,7 @@ def main(righe: list[str] | None = None) -> int:
             titolo=opzioni.canzone.stem,
             strumento=strumento,
             bpm=bpm,
-            tab=dati(suonate, strumento, bpm=bpm, partenza=partenza),
+            tab=dati(suonate, strumento, bpm=bpm, partenza=partenza, parole=dette),
             tracce=[{"nome": nome, "file": file.name} for nome, file in sorted(tracce.items())],
         )
         print(f"\ntablatura: {testo}\npagina:    {pagina}")

@@ -25,6 +25,7 @@ def dati(
     suddivisione: int = 4,
     movimenti: int = 4,
     partenza: float = 0.0,
+    parole=(),
 ) -> dict:
     """La tablatura in una forma che il browser sa disegnare e far scorrere."""
     if suonate:
@@ -52,6 +53,7 @@ def dati(
         "perBattuta": per_battuta,
         "durataCella": round(cella, 4),
         "note": note,
+        "parole": [{"testo": p.testo, "quando": round(p.inizio, 3)} for p in parole],
     }
 
 
@@ -75,6 +77,8 @@ PAGINA = """<!doctype html>
   td { padding: 4px 8px; border-bottom: 1px solid var(--bordo); }
   td.nome { text-transform: capitalize; }
   pre { overflow-x: auto; line-height: 1.7; font-size: 14px; }
+  #testo { min-height: 1.6em; margin: 0 0 12px; font-size: 17px; opacity: .5; }
+  #testo b { color: var(--acceso); font-weight: 600; }
   .n { padding: 1px 0; border-radius: 3px; }
   .n.ora { background: var(--acceso); color: #000; }
 </style>
@@ -88,6 +92,7 @@ PAGINA = """<!doctype html>
 </div>
 
 <table id="tracce"></table>
+<p id="testo"></p>
 <pre id="tab"></pre>
 
 <script>
@@ -160,6 +165,23 @@ const caselle = new Map();
   pre.append(...righe);
 }
 
+// Il testo che scorre: serve a sapere dove si è dentro un giro che si
+// ripete uguale per tutto il pezzo.
+const testo = document.getElementById("testo");
+function scriviTesto(ora) {
+  const parole = DATI.parole || [];
+  if (!parole.length) return;
+  let i = 0;
+  while (i + 1 < parole.length && parole[i + 1].quando <= ora) i++;
+  if (parole[i].quando > ora) { testo.textContent = ""; return; }
+  const prima = parole.slice(Math.max(0, i - 4), i).map(p => p.testo).join(" ");
+  const dopo = parole.slice(i + 1, i + 6).map(p => p.testo).join(" ");
+  testo.textContent = prima + " ";
+  const ora_ = document.createElement("b");
+  ora_.textContent = parole[i].testo;
+  testo.append(ora_, " " + dopo);
+}
+
 const audio = tracce.map(t => t.audio);
 const guida = audio[0];
 const via = document.getElementById("via");
@@ -186,6 +208,7 @@ setInterval(() => {
   // I lettori vanno ognuno per conto suo: ogni tanto si riallineano alla guida.
   for (const a of audio) if (Math.abs(a.currentTime - ora) > 0.08) a.currentTime = ora;
   tempo.textContent = orologio(ora);
+  scriviTesto(ora);
   if (guida.duration) scorri.value = Math.round((ora / guida.duration) * 1000);
 
   const vicina = DATI.note.reduce(

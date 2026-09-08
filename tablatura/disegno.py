@@ -78,14 +78,42 @@ def in_griglia(
     ]
 
 
+def _posizioni(inizio: int, quante: int, stanghette: set[int], base: int) -> dict[int, int]:
+    """A che colonna di caratteri finisce ogni cella, stanghette comprese."""
+    x, posizioni = base, {}
+    for i in range(inizio, inizio + quante):
+        if i in stanghette and i != inizio:
+            x += 1
+        posizioni[i] = x
+        x += LARGHEZZA_CELLA
+    return posizioni
+
+
+def _riga_parole(parole: dict[int, str], posizioni: dict[int, int]) -> str:
+    """Le parole incolonnate sotto la cella in cui si cantano.
+
+    Chi non ci sta senza pestare la parola prima slitta a destra: meglio una
+    sillaba fuori posto di due parole appiccicate che non si leggono.
+    """
+    riga = ""
+    for cella in sorted(parole):
+        if cella not in posizioni:
+            continue
+        dove = max(posizioni[cella], len(riga) + 1 if riga else 0)
+        riga = riga.ljust(dove) + parole[cella]
+    return riga
+
+
 def _disegna_colonne(
     colonne: list[dict[int, int]],
     strumento: Strumento,
     stanghette: set[int],
     celle_per_riga: int,
+    parole: dict[int, str] | None = None,
 ) -> str:
     etichette = _etichette(strumento)
     corde = list(reversed(range(len(strumento.corde))))  # l'acuta in cima
+    base = len(etichette[0]) + 1
     righe: list[str] = []
 
     for inizio in range(0, max(1, len(colonne)), celle_per_riga):
@@ -99,6 +127,11 @@ def _disegna_colonne(
                 pezzi.append(_cella(colonna.get(corda)))
             pezzi.append("|")
             blocco.append("".join(pezzi))
+        if parole:
+            posizioni = _posizioni(inizio, len(fetta), stanghette, base)
+            dette = {c: p for c, p in parole.items() if c in posizioni}
+            if dette:
+                blocco.append(_riga_parole(dette, posizioni))
         righe.append("\n".join(blocco))
     return "\n\n".join(righe)
 
@@ -111,21 +144,29 @@ def a_battute(
     movimenti: int = 4,
     partenza: float = 0.0,
     battute_per_riga: int = 4,
+    parole: dict[int, str] | None = None,
 ) -> str:
-    """Tablatura in battute, con le stanghette al posto giusto."""
+    """Tablatura in battute, con le stanghette al posto giusto.
+
+    Le `parole` vanno incasellate con la stessa `partenza` di qui, altrimenti
+    finiscono sotto la nota sbagliata: `allinea_partenza` dà quella buona.
+    """
     battute = in_griglia(suonate, bpm, suddivisione, movimenti, partenza)
     if not battute:
         return "(nessuna nota)"
     per_battuta = movimenti * suddivisione
     colonne = [colonna for battuta in battute for colonna in battuta]
     stanghette = {i * per_battuta for i in range(len(battute))}
-    return _disegna_colonne(colonne, strumento, stanghette, per_battuta * battute_per_riga)
+    return _disegna_colonne(
+        colonne, strumento, stanghette, per_battuta * battute_per_riga, parole
+    )
 
 
 def disegna_battute(
     battute: list[list[dict[int, int]]],
     strumento: Strumento,
     battute_per_riga: int = 4,
+    parole: dict[int, str] | None = None,
 ) -> str:
     """Disegna solo le battute che le si danno, con le loro stanghette."""
     if not battute:
@@ -133,7 +174,9 @@ def disegna_battute(
     per_battuta = len(battute[0])
     colonne = [colonna for battuta in battute for colonna in battuta]
     stanghette = {i * per_battuta for i in range(len(battute))}
-    return _disegna_colonne(colonne, strumento, stanghette, per_battuta * battute_per_riga)
+    return _disegna_colonne(
+        colonne, strumento, stanghette, per_battuta * battute_per_riga, parole
+    )
 
 
 def a_proporzione(
