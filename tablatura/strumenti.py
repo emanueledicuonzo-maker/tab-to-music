@@ -26,6 +26,8 @@ class Strumento:
 
 # Mi1 La1 Re2 Sol2 — il basso normale.
 BASSO = Strumento("basso 4 corde", (28, 33, 38, 43))
+# Re1 La1 Re2 Sol2 — il Mi abbassato a Re, per il rock pesante (Rage, Tool, Foo Fighters).
+BASSO_DROP_D = Strumento("basso drop D", (26, 33, 38, 43))
 # Con il Si0 sotto, per chi scende.
 BASSO_5 = Strumento("basso 5 corde", (23, 28, 33, 38, 43))
 CHITARRA = Strumento("chitarra", (40, 45, 50, 55, 59, 64))
@@ -33,6 +35,7 @@ CHITARRA_DROP_D = Strumento("chitarra drop D", (38, 45, 50, 55, 59, 64))
 
 STRUMENTI = {
     "basso": BASSO,
+    "basso-dropd": BASSO_DROP_D,
     "basso5": BASSO_5,
     "chitarra": CHITARRA,
     "chitarra-dropd": CHITARRA_DROP_D,

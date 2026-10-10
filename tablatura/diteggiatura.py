@@ -13,11 +13,15 @@ from .strumenti import Nota, NotaSuonata, Posizione, Strumento
 
 # Quanto pesa spostare la mano di un tasto rispetto a cambiare corda.
 PESO_SALTO_TASTO = 1.2
-PESO_SALTO_CORDA = 0.4
+PESO_SALTO_CORDA = 0.8
 # Una corda a vuoto non muove la mano: lo spostamento intorno a lei conta meno.
-SCONTO_CORDA_VUOTA = 0.3
-# Piccolo premio alle corde a vuoto e alla prima posizione, dove si sta comodi.
+SCONTO_CORDA_VUOTA = 0.6
+# La corda più grave a vuoto è la nota di pedale dei riff (il Re basso di
+# Killing in the Name): lì il premio. Le altre corde a vuoto invece un bassista
+# le evita quando ha la mano in posizione, perché suonano diverse e staccano dal
+# riff: su Killing in the Name il Re del riff va al 5° del La, non sul Re a vuoto.
 PREMIO_CORDA_VUOTA = 1.0
+MULTA_CORDA_VUOTA_ALTA = 0.6
 PESO_TASTO_ALTO = 0.08
 # Oltre il dodicesimo si legge peggio e si suona peggio: si evita se si può.
 SOGLIA_TASTO_SCOMODO = 12
@@ -38,7 +42,7 @@ def posizioni_possibili(midi: int, strumento: Strumento) -> list[Posizione]:
 def _costo_posizione(posizione: Posizione) -> float:
     costo = PESO_TASTO_ALTO * posizione.tasto
     if posizione.tasto == 0:
-        costo -= PREMIO_CORDA_VUOTA
+        costo += -PREMIO_CORDA_VUOTA if posizione.corda == 0 else MULTA_CORDA_VUOTA_ALTA
     if posizione.tasto > SOGLIA_TASTO_SCOMODO:
         costo += PESO_TASTO_SCOMODO * (posizione.tasto - SOGLIA_TASTO_SCOMODO)
     return costo

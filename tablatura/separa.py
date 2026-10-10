@@ -14,6 +14,7 @@ MODELLO_6 = "htdemucs_6s"
 # Che traccia serve a ogni strumento, e con che modello si ottiene.
 TRACCIA = {
     "basso": ("bass", MODELLO_4),
+    "basso-dropd": ("bass", MODELLO_4),
     "basso5": ("bass", MODELLO_4),
     "chitarra": ("guitar", MODELLO_6),
     "chitarra-dropd": ("guitar", MODELLO_6),
