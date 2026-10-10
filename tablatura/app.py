@@ -153,7 +153,7 @@ def pagina_di(cartella: Path) -> str:
     bpm = 60.0 / (tab["durataCella"] * 4)
     tracce = [{"nome": f.stem, "file": urllib.parse.quote(f.name)} for f in sorted(cartella.glob("*.wav"))]
     nome = next((s.nome for s in STRUMENTI.values() if s.nome == tab.get("strumento")), tab.get("strumento", ""))
-    return pagina(cartella.name, nome, round(bpm, 2), tab, tracce)
+    return pagina(cartella.name.replace("_", " "), nome, round(bpm, 2), tab, tracce)
 
 
 def sfoglia(dove: str | None) -> dict:

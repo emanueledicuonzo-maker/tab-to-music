@@ -4,57 +4,72 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tablatura</title>
 <style>
-  :root { color-scheme: light dark; --bordo: #8884; --acceso: #e8a33d; --fondo: Canvas; --morbido: #8881; }
+  :root { color-scheme: dark; --bordo: #ffffff14; --acceso: #ffb020; --rosa: #ff3d81; --ciano: #2de2e6;
+          --fondo: #06060b; --pannello: #ffffff08; --morbido: #ffffff0c; --testo: #eef0f6; --tenue: #9aa0b4; }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
-  body { font: 15px/1.5 system-ui, sans-serif; display: flex; flex-direction: column; background: var(--fondo); }
-  header { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--bordo); }
-  header h1 { font-size: 16px; margin: 0 8px 0 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  button { font: inherit; padding: 7px 14px; border: 1px solid var(--bordo); border-radius: 8px;
-           background: transparent; color: inherit; cursor: pointer; }
-  button:hover { border-color: var(--acceso); }
-  button.primario { background: var(--acceso); border-color: var(--acceso); color: #000; font-weight: 600; }
-  button:disabled { opacity: .4; cursor: default; }
-  #stato { margin-left: auto; font-size: 13px; opacity: .75; text-align: right; cursor: pointer; max-width: 50%;
+  body { font: 15px/1.5 system-ui, "Ubuntu", sans-serif; display: flex; flex-direction: column; color: var(--testo); background: var(--fondo); }
+  header { display: flex; align-items: center; gap: 10px; padding: 10px 18px; border-bottom: 1px solid var(--bordo);
+           background: linear-gradient(90deg, #ffb02010, #ff3d810c 40%, #2de2e608); }
+  .marchio { display: flex; align-items: center; gap: 10px; margin-right: 10px; font-weight: 800; letter-spacing: .02em; }
+  .marchio i { width: 28px; height: 28px; border-radius: 9px; background: conic-gradient(from 200deg, var(--acceso), var(--rosa), var(--ciano), var(--acceso));
+               box-shadow: 0 0 18px #ff3d8166; }
+  header h1 { font-size: 14px; margin: 0 8px 0 0; font-weight: 500; color: var(--tenue); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  button { font: inherit; padding: 7px 16px; border: 1px solid var(--bordo); border-radius: 10px; background: var(--pannello);
+           color: inherit; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+  button:hover { border-color: #ffffff33; }
+  button.primario { background: linear-gradient(135deg, var(--acceso), var(--rosa)); border: 0; color: #111; font-weight: 700;
+                    box-shadow: 0 0 18px #ff3d8155; }
+  button:disabled { opacity: .35; cursor: default; box-shadow: none; }
+  #stato { margin-left: auto; font-size: 13px; color: var(--tenue); text-align: right; cursor: pointer; max-width: 50%;
            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #stato.attivo { color: var(--testo); }
   #stato.attivo::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-                          background: var(--acceso); margin-right: 6px; animation: pulsa 1s infinite alternate; }
-  @keyframes pulsa { to { opacity: .3; } }
+                          background: var(--acceso); box-shadow: 0 0 10px var(--acceso); margin-right: 8px; animation: pulsa .8s infinite alternate; }
+  @keyframes pulsa { to { opacity: .25; } }
   main { flex: 1; position: relative; }
-  iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
-  .vuoto { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; opacity: .7; gap: 12px; }
-  .vuoto div { display: flex; gap: 8px; justify-content: center; }
+  iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: var(--fondo); }
+  .vuoto { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 18px;
+           background: radial-gradient(700px 400px at 50% 40%, #ff3d8118, transparent 70%); }
+  .vuoto p { font-size: 28px; font-weight: 800; margin: 0; }
+  .vuoto small { color: var(--tenue); }
+  .vuoto div { display: flex; gap: 10px; justify-content: center; }
 
-  dialog { border: 1px solid var(--bordo); border-radius: 12px; padding: 0; width: min(860px, 94vw);
-           max-height: 86vh; background: var(--fondo); color: inherit; }
-  dialog[open] { display: flex; flex-direction: column; }
-  dialog::backdrop { background: #0006; }
-  .testa { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--bordo); }
-  .testa h2 { font-size: 16px; margin: 0; flex: 1; }
-  .chiudi { border: 0; font-size: 22px; line-height: 1; padding: 2px 8px; }
-  .corpo { overflow: auto; padding: 8px 16px; flex: 1; }
-  .piede { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 12px 16px; border-top: 1px solid var(--bordo); }
+  dialog { border: 1px solid var(--bordo); border-radius: 16px; padding: 0; width: min(900px, 94vw); max-height: 86vh;
+           background: #0d0d16f2; color: inherit; box-shadow: 0 30px 90px #000c, 0 0 0 1px #ffffff08; }
+  dialog[open] { display: flex; flex-direction: column; animation: entra .16s ease-out; }
+  @keyframes entra { from { transform: translateY(8px) scale(.98); opacity: 0; } }
+  dialog::backdrop { background: #000a; backdrop-filter: blur(4px); }
+  .testa { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--bordo); }
+  .testa h2 { font-size: 17px; margin: 0; flex: 1; }
+  .chiudi { border: 0; background: transparent; font-size: 24px; line-height: 1; padding: 2px 10px; color: var(--tenue); }
+  .chiudi:hover { color: var(--rosa); }
+  .corpo { overflow: auto; padding: 8px 18px; flex: 1; }
+  .piede { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px 18px; border-top: 1px solid var(--bordo); }
   .piede .spinta { margin-left: auto; }
-  input[type=search], input[type=text], select { font: inherit; padding: 6px 10px; border: 1px solid var(--bordo);
-           border-radius: 8px; background: transparent; color: inherit; }
-  .album { font-weight: 600; margin: 12px 0 4px; opacity: .8; }
-  .voce { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
+  input[type=search], input[type=text], select { font: inherit; padding: 7px 12px; border: 1px solid var(--bordo);
+           border-radius: 10px; background: #ffffff08; color: inherit; }
+  select option { background: #111; }
+  input[type=checkbox] { accent-color: var(--acceso); width: 16px; height: 16px; }
+  .album { font-size: 12px; text-transform: uppercase; letter-spacing: .14em; margin: 16px 0 4px; color: var(--ciano); }
+  .voce { display: flex; align-items: center; gap: 12px; padding: 7px 10px; border-radius: 10px; cursor: pointer; }
   .voce:hover { background: var(--morbido); }
   .voce .nome { flex: 1; }
-  .voce .tipo { opacity: .5; font-size: 13px; }
-  .voce.aperta { color: var(--acceso); font-weight: 600; }
+  .voce .tipo { color: var(--tenue); font-size: 13px; }
+  .voce.aperta { color: var(--acceso); font-weight: 700; }
   .percorso { display: flex; gap: 6px; flex: 1; }
   .percorso input { flex: 1; min-width: 0; }
-  .lavoro { display: grid; grid-template-columns: 110px 1fr; gap: 2px 10px; padding: 8px 0; border-bottom: 1px solid var(--bordo); }
-  .lavoro .esito { font-size: 13px; font-weight: 600; }
-  .lavoro .dett { grid-column: 2; font-size: 12px; opacity: .65; font-family: ui-monospace, monospace;
+  .lavoro { display: grid; grid-template-columns: 120px 1fr; gap: 2px 12px; padding: 10px 0; border-bottom: 1px solid var(--bordo); }
+  .lavoro .esito { font-size: 13px; font-weight: 700; }
+  .lavoro .dett { grid-column: 2; font-size: 12px; color: var(--tenue); font-family: ui-monospace, monospace;
                   white-space: pre-wrap; word-break: break-all; }
-  .esito.fatta { color: #3a9a4a; } .esito.errore { color: #d04040; } .esito.lavorazione { color: var(--acceso); }
-  label.opz { display: flex; align-items: center; gap: 6px; }
+  .esito.fatta { color: #6bffa0; } .esito.errore { color: var(--rosa); } .esito.lavorazione { color: var(--acceso); }
+  label.opz { display: flex; align-items: center; gap: 6px; color: var(--tenue); }
 </style>
 
 <header>
-  <h1 id="titolo">Tablatura</h1>
+  <span class="marchio"><i></i>Tablatura</span>
+  <h1 id="titolo"></h1>
   <button id="bApri">Apri</button>
   <button id="bImporta">Importa</button>
   <span id="stato" title="Mostra la coda"></span>
@@ -62,7 +77,7 @@
 <main>
   <iframe id="foglio" hidden></iframe>
   <div class="vuoto" id="vuoto">
-    <p>Nessuna canzone aperta.</p>
+    <p>Che si suona?</p><small>Apri una canzone già fatta, o importane di nuove dalla tua musica.</small>
     <div><button data-vai="apri">Apri una canzone</button><button data-vai="importa" class="primario">Importa</button></div>
   </div>
 </main>
@@ -125,7 +140,7 @@ function apri(id) {
   $("foglio").src = percorsoTab(id);
   $("foglio").hidden = false;
   $("vuoto").hidden = true;
-  $("titolo").textContent = id.split("/")[1];
+  $("titolo").textContent = "— " + id.split("/")[1];
   document.title = id.split("/")[1] + " — Tablatura";
   api("/api/preferenze", { ultima: id });
 }
