@@ -2,6 +2,13 @@
 # Lanciatore per l'icona: scegli canzoni o cartelle e lo strumento, poi si aprono le pagine.
 cd "$(dirname "$(readlink -f "$0")")" || exit 1
 
+# Una sola alla volta: un secondo clic non ne apre un'altra.
+exec 9>"${XDG_RUNTIME_DIR:-/tmp}/tablatura.lock"
+if ! flock -n 9; then
+  notify-send -i audio-x-generic "Tablatura" "È già aperta: guarda le sue finestre."
+  exit 0
+fi
+
 audio='.*\.\(mp3\|flac\|wav\|ogg\|m4a\)'
 
 scelta=$(zenity --list --radiolist --title="Tablatura" --text="Cosa vuoi caricare?" \
@@ -74,7 +81,7 @@ done
 
 # Una canzone sola: si apre la sua pagina e basta.
 if [[ $totale -eq 1 && ${#pagine[@]} -eq 1 && -n ${pagine[0]} ]]; then
-  xdg-open "${pagine[0]}"
+  xdg-open "${pagine[0]}" 9>&-
   exit 0
 fi
 
@@ -87,6 +94,6 @@ while scelto=$(zenity --list --title="Tablatura: ${#pagine[@]} su $totale fatte"
   if [[ $scelto == *.log ]]; then
     zenity --text-info --title="Tablatura: cosa è andato storto" --filename="$scelto" --width=700 --height=450
   else
-    xdg-open "$scelto"
+    xdg-open "$scelto" 9>&-
   fi
 done
