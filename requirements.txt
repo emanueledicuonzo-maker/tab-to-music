@@ -3,3 +3,4 @@ demucs>=4.0.1
 librosa>=0.10
 soundfile>=0.12
 faster-whisper>=1.0
+setuptools<81  # basic-pitch → resampy usa ancora pkg_resources
