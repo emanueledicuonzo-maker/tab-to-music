@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .accordi import DITEGGIATURE
 from .disegno import allinea_partenza, in_griglia
 from .strumenti import NotaSuonata, Strumento
 
@@ -26,6 +27,7 @@ def dati(
     movimenti: int = 4,
     partenza: float = 0.0,
     parole=(),
+    accordi=(),
 ) -> dict:
     """La tablatura in una forma che il browser sa disegnare e far scorrere."""
     if suonate:
@@ -55,6 +57,8 @@ def dati(
         "partenza": round(partenza, 3),
         "note": note,
         "parole": [{"testo": p.testo, "quando": round(p.inizio, 3)} for p in parole],
+        "accordi": [{"nome": a.nome, "quando": round(a.inizio, 3)} for a in accordi],
+        "diteggiature": {a.nome: DITEGGIATURE[a.nome] for a in accordi if a.nome in DITEGGIATURE},
     }
 
 
@@ -81,13 +85,24 @@ PAGINA = """<!doctype html>
   td.nome { text-transform: capitalize; }
   #tab { font: 14px/1.7 ui-monospace, monospace; }
   .rigo { white-space: pre; padding: 10px 8px 6px; margin-bottom: 10px; border-radius: 8px;
-          border-left: 3px solid transparent; cursor: pointer; }
+          border-left: 3px solid transparent; cursor: pointer; overflow-x: auto; }
   .rigo.ora { border-left-color: var(--acceso); background: #e8a33d14; }
   .parole { opacity: .6; margin-top: 2px; }
   .rigo.ora .parole { opacity: .9; }
   .parola.ora { color: var(--acceso); font-weight: 600; }
   .n { padding: 1px 0; border-radius: 3px; }
   .n.ora { background: var(--acceso); color: #000; }
+  .accordi { font-weight: 700; color: var(--acceso); margin-bottom: 2px; }
+  .accordo.ora { background: var(--acceso); color: #000; border-radius: 3px; }
+  #vista { display: flex; gap: 4px; margin-bottom: 12px; }
+  #diagrammi { position: sticky; top: 0; z-index: 1; display: flex; flex-wrap: wrap; gap: 6px;
+               padding: 8px 0; margin-bottom: 12px; background: Canvas; }
+  .diagramma { text-align: center; padding: 4px 6px; border: 1px solid var(--bordo); border-radius: 8px;
+               font-weight: 600; font-size: 13px; }
+  .diagramma.ora { border-color: var(--acceso); color: var(--acceso); box-shadow: 0 0 0 1px var(--acceso); }
+  .diagramma svg { display: block; }
+  body.soloaccordi .corda { display: none; }
+  body.soloaccordi .rigo { font-size: 17px; }
 </style>
 <h1>__TITOLO__</h1>
 <p class="nota">Tablatura per __STRUMENTO__ · __BPM__ bpm · tutto in locale, niente esportazione</p>
@@ -102,6 +117,10 @@ PAGINA = """<!doctype html>
 </div>
 
 <table id="tracce"></table>
+<div id="vista" hidden>
+  <button data-vista="tab" class="attivo">Tablatura</button><button data-vista="accordi">Accordi e testo</button>
+</div>
+<div id="diagrammi"></div>
 <div id="tab"></div>
 
 <script>
@@ -151,8 +170,8 @@ for (const t of tracce) {
 }
 
 // La tablatura a righi, come su un foglio: tante battute per rigo quante ne
-// stanno nella finestra, e sotto ogni rigo le parole cantate in quel tratto,
-// ognuna sotto la casella in cui cade. Il testo serve a sapere dove si è
+// stanno nella finestra, sopra ogni rigo gli accordi e sotto le parole
+// cantate in quel tratto, ognuna sopra o sotto la casella in cui cade. Il testo serve a sapere dove si è
 // dentro un giro che si ripete uguale per tutto il pezzo.
 const CELLA = 2;
 const PREFISSO = 3;  // " G|"
@@ -167,6 +186,85 @@ let caselle = new Map();
 let righi = [];         // { el, da, a } in celle
 let paroleEl = [];      // lo span di ogni parola, nello stesso ordine di DATI.parole
 let rigoAcceso = -1, parolaAccesa = -1;
+const accordi = DATI.accordi || [];
+const DITA = DATI.diteggiature || {};
+let accordiEl = [], accordoAcceso = -1;
+const diagrammiEl = new Map();
+
+// Una riga di voci (accordi o parole), ognuna alla colonna della sua casella;
+// se due si pestano i piedi, la seconda scivola a destra. Quelle dopo l'ultima
+// battuta finiscono nell'ultimo rigo.
+function incolonna(voci, indice, da, a, ultimo, classe, classeVoce, testoDi, spans) {
+  const el = document.createElement("div");
+  el.className = classe;
+  let colonna = 0;
+  while (indice < voci.length && (ultimo || cellaDi(voci[indice].quando) < a)) {
+    const locale = Math.min(a - da, Math.max(0, cellaDi(voci[indice].quando) - da));
+    const voluta = PREFISSO + locale * CELLA + Math.floor(locale / PB);
+    const dove = Math.max(voluta, colonna > 0 ? colonna + 1 : 0);
+    el.append(" ".repeat(dove - colonna));
+    const span = document.createElement("span");
+    span.className = classeVoce;
+    span.textContent = testoDi(voci[indice]);
+    el.append(span);
+    spans[indice] = span;
+    colonna = dove + span.textContent.length;
+    indice++;
+  }
+  if (!el.childNodes.length) el.textContent = " ";
+  return { el, indice };
+}
+
+// Il disegno di un accordo: sei corde in verticale, cinque tasti, i pallini
+// dove vanno le dita, x sulle corde da non suonare, o su quelle a vuoto.
+function diagramma(forma) {
+  const tasti = [...forma].map(c => (c === "x" ? -1 : Number(c)));
+  const premuti = tasti.filter(t => t > 0);
+  const massimo = Math.max(0, ...premuti);
+  const base = massimo <= 4 ? 1 : Math.min(...premuti);
+  const L = 64, A = 80, x0 = 10, y0 = 16, dx = (L - 2 * x0) / 5, dy = (A - y0 - 6) / 5;
+  const X = c => x0 + c * dx, Y = t => y0 + (t - base + 0.5) * dy;
+  let svg = `<svg width="${L}" height="${A}" viewBox="0 0 ${L} ${A}" fill="none" stroke="currentColor">`;
+  for (let c = 0; c < 6; c++) svg += `<line x1="${X(c)}" y1="${y0}" x2="${X(c)}" y2="${y0 + 5 * dy}" stroke-width="1"/>`;
+  for (let t = 0; t <= 5; t++)
+    svg += `<line x1="${X(0)}" y1="${y0 + t * dy}" x2="${X(5)}" y2="${y0 + t * dy}" stroke-width="${t === 0 && base === 1 ? 3 : 1}"/>`;
+  if (base > 1) svg += `<text x="1" y="${y0 + dy * 0.75}" font-size="9" fill="currentColor" stroke="none">${base}</text>`;
+  // Il barrè: niente corde a vuoto e il tasto più basso preso da più corde.
+  const minimo = premuti.length ? Math.min(...premuti) : 0;
+  const sulMinimo = tasti.map((t, c) => (t === minimo ? c : -1)).filter(c => c >= 0);
+  if (!forma.includes("0") && sulMinimo.length >= 2)
+    svg += `<line x1="${X(sulMinimo[0])}" y1="${Y(minimo)}" x2="${X(sulMinimo.at(-1))}" y2="${Y(minimo)}" stroke-width="7" stroke-linecap="round"/>`;
+  tasti.forEach((t, c) => {
+    if (t < 0) svg += `<text x="${X(c) - 3}" y="11" font-size="9" fill="currentColor" stroke="none">×</text>`;
+    else if (t === 0) svg += `<circle cx="${X(c)}" cy="8" r="3"/>`;
+    else svg += `<circle cx="${X(c)}" cy="${Y(t)}" r="4" fill="currentColor"/>`;
+  });
+  return svg + "</svg>";
+}
+
+{
+  // In cima, ogni accordo della canzone una volta sola, nell'ordine in cui arriva.
+  const contenitore = document.getElementById("diagrammi");
+  for (const nome of new Set(accordi.map(a => a.nome))) {
+    if (!DITA[nome]) continue;
+    const box = document.createElement("div");
+    box.className = "diagramma";
+    box.innerHTML = `${nome}${diagramma(DITA[nome])}`;
+    contenitore.append(box);
+    diagrammiEl.set(nome, box);
+  }
+  if (!accordi.length) contenitore.remove();
+  else {
+    const vista = document.getElementById("vista");
+    vista.hidden = false;
+    for (const b of vista.querySelectorAll("button")) {
+      b.onclick = () => {
+        document.body.classList.toggle("soloaccordi", b.dataset.vista === "accordi");
+        for (const x of vista.querySelectorAll("button")) x.classList.toggle("attivo", x === b);
+      };
+    }
+  }
+}
 
 function larghezzaCarattere() {
   const prova = document.createElement("span");
@@ -183,16 +281,25 @@ function disegna() {
   const perRigo = Math.max(1, Math.floor((colonne - PREFISSO) / (PB * CELLA + 1)));
   const parole = DATI.parole || [];
   caselle = new Map();
+  accordiEl = new Array(accordi.length);
+  let a_ = 0;
   righi = [];
   paroleEl = new Array(parole.length);
   tab.textContent = "";
   let p = 0;
   for (let b0 = 0; b0 < battuteTotali; b0 += perRigo) {
     const da = b0 * PB, a = Math.min(DATI.celle, (b0 + perRigo) * PB);
+    const ultimo = b0 + perRigo >= battuteTotali;
     const rigo = document.createElement("div");
     rigo.className = "rigo";
+    if (accordi.length) {
+      const fatto = incolonna(accordi, a_, da, a, ultimo, "accordi", "accordo", x => x.nome, accordiEl);
+      a_ = fatto.indice;
+      rigo.append(fatto.el);
+    }
     for (let corda = DATI.corde.length - 1; corda >= 0; corda--) {
       const riga = document.createElement("div");
+      riga.className = "corda";
       riga.append(DATI.corde[corda].padStart(2) + "|");
       for (let i = da; i < a; i++) {
         if (i > da && i % PB === 0) riga.append("|");
@@ -206,27 +313,11 @@ function disegna() {
       riga.append("|");
       rigo.append(riga);
     }
-    // Le parole del rigo, ognuna alla colonna della sua casella; se due si
-    // pestano i piedi, la seconda scivola a destra. Le parole dopo l'ultima
-    // battuta finiscono nell'ultimo rigo.
-    const ultimo = b0 + perRigo >= battuteTotali;
-    const sotto = document.createElement("div");
-    sotto.className = "parole";
-    let colonna = 0;
-    while (p < parole.length && (ultimo || cellaDi(parole[p].quando) < a)) {
-      const locale = Math.min(a - da, Math.max(0, cellaDi(parole[p].quando) - da));
-      const voluta = PREFISSO + locale * CELLA + Math.floor(locale / PB);
-      const dove = Math.max(voluta, colonna > 0 ? colonna + 1 : 0);
-      sotto.append(" ".repeat(dove - colonna));
-      const span = document.createElement("span");
-      span.className = "parola";
-      span.textContent = parole[p].testo;
-      sotto.append(span);
-      paroleEl[p] = span;
-      colonna = dove + parole[p].testo.length;
-      p++;
+    if (parole.length) {
+      const fatto = incolonna(parole, p, da, a, ultimo, "parole", "parola", x => x.testo, paroleEl);
+      p = fatto.indice;
+      rigo.append(fatto.el);
     }
-    if (parole.length) { if (!sotto.childNodes.length) sotto.textContent = " "; rigo.append(sotto); }
     rigo.onclick = () => {
       const quando = partenza + da * DATI.durataCella;
       audio.forEach(x => { x.currentTime = quando; });
@@ -236,6 +327,7 @@ function disegna() {
   }
   rigoAcceso = -1;
   parolaAccesa = -1;
+  accordoAcceso = -1;
   acceso = null;
 }
 
@@ -257,6 +349,15 @@ function seguiRighi(ora) {
     paroleEl[parolaAccesa]?.classList.remove("ora");
     paroleEl[i]?.classList.add("ora");
     parolaAccesa = i;
+  }
+  let k = -1;
+  while (k + 1 < accordi.length && accordi[k + 1].quando <= ora) k++;
+  if (k !== accordoAcceso) {
+    accordiEl[accordoAcceso]?.classList.remove("ora");
+    diagrammiEl.get(accordi[accordoAcceso]?.nome)?.classList.remove("ora");
+    accordiEl[k]?.classList.add("ora");
+    diagrammiEl.get(accordi[k]?.nome)?.classList.add("ora");
+    accordoAcceso = k;
   }
 }
 

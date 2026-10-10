@@ -122,6 +122,15 @@ def main(righe: list[str] | None = None) -> int:
             dette = ascolta(voce, opzioni.lingua)
             print(f"  {len(dette)} parole")
 
+    accordi = []
+    armonia = [tracce[nome] for nome in ("guitar", "piano", "other") if nome in tracce]
+    if bpm and armonia:
+        from .accordi import ascolta as riconosci
+
+        print("riconosco gli accordi…")
+        accordi = riconosci(armonia, tracce.get("bass"), bpm, partenza)
+        print(f"  {len(accordi)} accordi, {len({a.nome for a in accordi})} diversi")
+
     print()
     if opzioni.senza_battute or not bpm:
         tab = a_proporzione(suonate, strumento)
@@ -160,7 +169,7 @@ def main(righe: list[str] | None = None) -> int:
     if bpm:
         # Lo stesso contenuto della pagina, in un file che il leggio sul web
         # sa leggere: il lavoro pesante resta qui, la lettura va dove serve.
-        descrizione = dati(suonate, strumento, bpm=bpm, partenza=partenza, parole=dette)
+        descrizione = dati(suonate, strumento, bpm=bpm, partenza=partenza, parole=dette, accordi=accordi)
         (dove / "leggio.json").write_text(json.dumps(descrizione), encoding="utf-8")
         pagina = dove / "tablatura.html"
         scrivi(
