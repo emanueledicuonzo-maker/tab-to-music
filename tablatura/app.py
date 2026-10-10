@@ -118,8 +118,11 @@ def lavora() -> None:
                 comando += ["--lingua", prossimo.lingua]
         if prossimo.strumento.startswith("chitarra"):
             comando.append("--polifonico")
+        # Senza PYTHONUNBUFFERED il programma tiene le righe per sé fino alla
+        # fine, e la barra di avanzamento resterebbe ferma per tutto il lavoro.
         processo = subprocess.Popen(
-            comando, cwd=RADICE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
+            comando, cwd=RADICE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
+            env=os.environ | {"PYTHONUNBUFFERED": "1"},
         )
         for riga in processo.stdout:
             riga = riga.strip()
