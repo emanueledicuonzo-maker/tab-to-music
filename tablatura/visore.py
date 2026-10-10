@@ -75,6 +75,7 @@ PAGINA = """<!doctype html>
     --bagliore: 0 0 18px #ffb02088, 0 0 2px #ffb020;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html { background: var(--fondo); }
   body { --respiro: 0; margin: 0; padding: 0 28px 80px; font: 15px/1.5 system-ui, "Ubuntu", sans-serif; color: var(--testo);
          background: radial-gradient(1200px 600px at 15% -10%, rgb(255 61 129 / calc(.10 + var(--respiro) * .25)), transparent 60%),
