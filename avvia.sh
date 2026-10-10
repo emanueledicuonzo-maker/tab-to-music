@@ -12,4 +12,8 @@ if ! curl -s -o /dev/null "$INDIRIZZO"; then
   done
 fi
 
-exec google-chrome --app="$INDIRIZZO" --class=Tablatura
+# Un Chrome tutto suo, con un profilo a parte: se usasse il tuo, la prima
+# volta che Chrome è chiuso lo accenderebbe lui, e GNOME metterebbe sotto
+# l'icona Tablatura anche tutte le tue pagine normali.
+exec google-chrome --user-data-dir="$HOME/.config/tablatura/chrome" --no-first-run --no-default-browser-check \
+  --app="$INDIRIZZO" --class=Tablatura
