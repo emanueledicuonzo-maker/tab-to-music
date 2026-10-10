@@ -5,3 +5,4 @@ __pycache__/
 
 .wrangler/
 node_modules/
+.venv-311/
