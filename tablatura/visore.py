@@ -106,6 +106,10 @@ PAGINA = """<!doctype html>
                box-shadow: 0 18px 50px #000a, 0 0 0 1px #ffffff1a; }
   #copertina[src=""] { display: none; }
   .album { margin-top: 6px; color: var(--tenue); font-size: 14px; }
+  .accordatura { display: inline-flex; gap: 8px; align-items: center; margin-top: 10px; padding: 4px 12px;
+                 border-radius: 999px; border: 1px solid #2de2e655; background: #2de2e612; color: var(--ciano);
+                 font-weight: 700; font-size: 13px; letter-spacing: .04em; }
+  .accordatura b { color: #fff; }
   .etichetta { font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: var(--tenue); }
   .etichetta b { color: var(--ciano); font-weight: 600; }
   h1 { font-size: clamp(22px, 2.6vw, 38px); line-height: 1.1; margin: 6px 0 0; font-weight: 800; letter-spacing: -.02em;
@@ -203,6 +207,7 @@ PAGINA = """<!doctype html>
       <div class="etichetta">Tablatura · <b>__STRUMENTO__</b> · __BPM__ bpm</div>
       <h1>__TITOLO__</h1>
       <div class="album">__ALBUM__</div>
+      <div class="accordatura" title="Accordatura, dalla corda più grave">__ACCORDATURA__</div>
     </div>
   </div>
   <div id="battiti" title="I movimenti della battuta"><i></i><i></i><i></i><i></i></div>
@@ -796,12 +801,24 @@ addEventListener("keydown", e => {
 """
 
 
+ITALIANO = {"C": "Do", "C#": "Do#", "D": "Re", "D#": "Re#", "E": "Mi", "F": "Fa", "F#": "Fa#", "G": "Sol",
+            "G#": "Sol#", "A": "La", "A#": "La#", "B": "Si"}
+
+
+def accordatura(strumento: str, corde: list[str]) -> str:
+    """«Drop D · Re La Re Sol»: come va accordato lo strumento, ben in vista."""
+    nomi = " ".join(ITALIANO.get(c, c) for c in corde)
+    tipo = "Drop D" if "drop" in strumento.lower() else "Standard"
+    return f"<b>{tipo}</b> {html.escape(nomi)}"
+
+
 def pagina(
     titolo: str, strumento: str, bpm: float, tab: dict, tracce: list[dict], copertina: str = "", album: str = ""
 ) -> str:
     """La pagina di una canzone, come testo."""
     return (
-        PAGINA.replace("__COPERTINA__", html.escape(copertina, quote=True))
+        PAGINA.replace("__ACCORDATURA__", accordatura(strumento, tab.get("corde", [])))
+        .replace("__COPERTINA__", html.escape(copertina, quote=True))
         .replace("__ALBUM__", html.escape(album))
         .replace("__TITOLO__", titolo)
         .replace("__STRUMENTO__", strumento)

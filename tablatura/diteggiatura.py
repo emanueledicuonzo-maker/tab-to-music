@@ -26,6 +26,8 @@ PESO_TASTO_ALTO = 0.08
 # Oltre il dodicesimo si legge peggio e si suona peggio: si evita se si può.
 SOGLIA_TASTO_SCOMODO = 12
 PESO_TASTO_SCOMODO = 0.5
+# La mano copre quattro tasti, un dito per tasto: dentro quella finestra non si muove.
+DITA = 4
 # Più tempo passa fra due note, più la mano ha modo di spostarsi con calma.
 FRETTA = 4.0
 
@@ -62,35 +64,66 @@ def fuori_estensione(note: list[Nota], strumento: Strumento) -> list[Nota]:
     return [n for n in note if not posizioni_possibili(n.midi, strumento)]
 
 
+def _sposta_mano(mano: int | None, tasto: int) -> tuple[int, int | None]:
+    """Di quanti tasti si sposta la mano per prendere `tasto`, e dove finisce.
+
+    `mano` è il tasto sotto l'indice: la mano copre da lì ai tre tasti dopo.
+    """
+    if tasto == 0:
+        return 0, mano
+    if mano is None:
+        return 0, tasto
+    if mano <= tasto <= mano + DITA - 1:
+        return 0, mano
+    if tasto > mano + DITA - 1:
+        return tasto - (mano + DITA - 1), tasto - (DITA - 1)
+    return mano - tasto, tasto
+
+
+def _costo_mano(mano: int | None, dopo: Posizione, corda_prima: int, pausa: float) -> float:
+    """Quanto costa arrivare a `dopo` con la mano ferma al tasto `mano`.
+
+    La corda a vuoto non sposta la mano: dopo il Re basso a vuoto di Killing
+    in the Name la mano è ancora al 5° tasto, e il Mi bemolle che segue si
+    prende al 6° del La, non al 1° del Re. Per questo la mano si ricorda
+    dell'ultima nota tastata, e lo spostamento si misura da lì.
+    """
+    urgenza = 1.0 / (1.0 + FRETTA * max(0.0, pausa))
+    salto_corda = abs(corda_prima - dopo.corda)
+    salto_tasto, _ = _sposta_mano(mano, dopo.tasto)
+    return (PESO_SALTO_TASTO * salto_tasto + PESO_SALTO_CORDA * salto_corda) * urgenza
+
+
 def diteggia(note: list[Nota], strumento: Strumento) -> list[NotaSuonata]:
     """Sceglie la posizione di ogni nota tenendo la mano ferma il più possibile.
 
     Le note fuori estensione vengono scartate: chiedile con `fuori_estensione`
-    prima di chiamare qui, se vuoi saperlo.
+    prima di chiamare qui, se vuoi saperlo. Lo stato di ogni passo è la
+    posizione della nota più il tasto dove sta la mano (che una corda a vuoto
+    non cambia).
     """
     suonabili = [n for n in note if posizioni_possibili(n.midi, strumento)]
     suonabili.sort(key=lambda n: (n.inizio, n.midi))
     if not suonabili:
         return []
 
-    # Viterbi: per ogni nota, il costo minimo per arrivarci in ogni posizione.
-    percorsi: list[dict[Posizione, tuple[float, Posizione | None]]] = []
+    Stato = tuple[Posizione, "int | None"]
+    percorsi: list[dict[Stato, tuple[float, Stato | None]]] = []
     for indice, nota in enumerate(suonabili):
-        passo: dict[Posizione, tuple[float, Posizione | None]] = {}
+        passo: dict[Stato, tuple[float, Stato | None]] = {}
         for posizione in posizioni_possibili(nota.midi, strumento):
             base = _costo_posizione(posizione)
             if indice == 0:
-                passo[posizione] = (base, None)
+                stato = (posizione, posizione.tasto or None)
+                passo[stato] = (base, None)
                 continue
             pausa = max(0.0, nota.inizio - suonabili[indice - 1].inizio)
-            migliore, provenienza = min(
-                (
-                    (costo + _costo_spostamento(precedente, posizione, pausa), precedente)
-                    for precedente, (costo, _) in percorsi[-1].items()
-                ),
-                key=lambda coppia: coppia[0],
-            )
-            passo[posizione] = (base + migliore, provenienza)
+            for precedente, (costo, _) in percorsi[-1].items():
+                pos_prima, mano = precedente
+                totale = costo + base + _costo_mano(mano, posizione, pos_prima.corda, pausa)
+                stato = (posizione, _sposta_mano(mano, posizione.tasto)[1])
+                if stato not in passo or totale < passo[stato][0]:
+                    passo[stato] = (totale, precedente)
         percorsi.append(passo)
 
     # Si torna indietro dal finale più economico.
@@ -102,4 +135,4 @@ def diteggia(note: list[Nota], strumento: Strumento) -> list[NotaSuonata]:
         scelte.append(precedente)
     scelte.reverse()
 
-    return [NotaSuonata(nota=n, posizione=p) for n, p in zip(suonabili, scelte)]
+    return [NotaSuonata(nota=n, posizione=stato[0]) for n, stato in zip(suonabili, scelte)]
