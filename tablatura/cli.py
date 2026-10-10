@@ -128,7 +128,10 @@ def main(righe: list[str] | None = None) -> int:
         from .accordi import ascolta as riconosci
 
         print("riconosco gli accordi…")
-        accordi = riconosci(armonia, tracce.get("bass"), bpm, partenza)
+        # La griglia degli accordi parte da un inizio di battuta, lo stesso
+        # della tablatura, così i cambi cadono sulle stanghette.
+        inizio = allinea_partenza(partenza, min(s.nota.inizio for s in suonate), bpm)
+        accordi = riconosci(armonia, tracce.get("bass"), bpm, inizio)
         print(f"  {len(accordi)} accordi, {len({a.nome for a in accordi})} diversi")
 
     print()

@@ -47,3 +47,14 @@ def test_ogni_accordo_ha_la_sua_diteggiatura():
         for nome in NOMI:
             forma = DITEGGIATURE[nome + tipo]
             assert len(forma) == 6 and all(c == "x" or c.isdigit() for c in forma)
+
+
+def test_i_cambi_si_agganciano_alla_mezza_battuta():
+    from tablatura.accordi import Accordo, aggancia
+
+    # Battuta di 2 secondi: la mezza battuta è 1. Un cambio a 2.4 va a 2,
+    # uno a 4.6 va a 5, e un accordo da 5.1 a 5.4 era di passaggio.
+    trovati = [Accordo("C", 0.0, 2.4), Accordo("G", 2.4, 4.6), Accordo("D", 5.1, 5.4), Accordo("Am", 4.6, 8.0)]
+    trovati.sort(key=lambda a: a.inizio)
+    fuori = aggancia(trovati, 0.0, 1.0)
+    assert [(a.nome, a.inizio) for a in fuori] == [("C", 0.0), ("G", 2.0), ("Am", 5.0)]

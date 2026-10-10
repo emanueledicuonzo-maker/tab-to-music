@@ -122,9 +122,16 @@ def _viterbi(probabilita: np.ndarray, passaggio: np.ndarray) -> list[int]:
 
 
 def ascolta(
-    armonia: list[Path], basso: Path | None, bpm: float, partenza: float = 0.0
+    armonia: list[Path],
+    basso: Path | None,
+    bpm: float,
+    partenza: float = 0.0,
+    movimenti: int = 4,
 ) -> list[Accordo]:
-    """Riconosce gli accordi dalle tracce separate, un battito alla volta.
+    """Riconosce gli accordi dalle tracce separate, battito per battito.
+
+    `partenza` è un inizio di battuta: i cambi trovati vengono poi agganciati
+    alla mezza battuta più vicina (vedi `aggancia`).
 
     `armonia` sono le tracce che portano gli accordi: «other» col modello a
     quattro tracce, chitarra e piano e «other» con quello a sei.
@@ -147,13 +154,41 @@ def ascolta(
         return []
 
     battito = 60.0 / bpm
-    primo = partenza % battito
-    tempi = np.arange(primo, durata, battito)
+    battuta = battito * movimenti
+    tempi = np.arange(partenza % battuta, durata, battito)
     if len(tempi) < 2:
         return []
     quadri = librosa.time_to_frames(tempi, sr=sr, hop_length=salto)
-    per_battito = librosa.util.sync(croma, quadri, aggregate=np.median)[:, 1:]
+    per_passo = librosa.util.sync(croma, quadri, aggregate=np.median)[:, 1:]
     # sync aggiunge una colonna prima del primo battito: la si toglie, e i
-    # battiti restano quelli fra un tempo e il successivo.
-    colonne = min(per_battito.shape[1], len(tempi) - 1)
-    return dal_croma(per_battito[:, :colonne], tempi[: colonne + 1])
+    # passi restano quelli fra un tempo e il successivo.
+    colonne = min(per_passo.shape[1], len(tempi) - 1)
+    trovati = dal_croma(per_passo[:, :colonne], tempi[: colonne + 1])
+    return aggancia(trovati, partenza % battuta, battuta / 2)
+
+
+def aggancia(accordi: list[Accordo], origine: float, passo: float) -> list[Accordo]:
+    """Sposta ogni cambio sulla mezza battuta più vicina.
+
+    Gli accordi cambiano quasi sempre sul primo movimento della battuta, o a
+    metà. Misurati battito per battito, invece, il cambio cade un movimento
+    prima o uno dopo a seconda di come suona quel battito: su Billie Jean
+    arrivavano in anticipo e in ritardo senza una logica. Agganciati alla
+    griglia di mezze battute, cadono dove li metterebbe un musicista. Un
+    accordo che dopo l'aggancio non dura niente era una nota di passaggio, e
+    sparisce.
+    """
+    a_griglia = lambda t: origine + round((t - origine) / passo) * passo
+    fuori: list[Accordo] = []
+    for a in accordi:
+        inizio, fine = a_griglia(a.inizio), a_griglia(a.fine)
+        if fine - inizio < 1e-6:
+            continue
+        if fuori and fuori[-1].nome == a.nome:
+            fuori[-1] = Accordo(a.nome, fuori[-1].inizio, fine)
+        elif fuori and inizio < fuori[-1].fine:
+            fuori[-1] = Accordo(fuori[-1].nome, fuori[-1].inizio, inizio)
+            fuori.append(Accordo(a.nome, inizio, fine))
+        else:
+            fuori.append(Accordo(a.nome, inizio, fine))
+    return fuori

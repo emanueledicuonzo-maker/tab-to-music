@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="it">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tablatura</title>
+<style>
+  :root { color-scheme: light dark; --bordo: #8884; --acceso: #e8a33d; --fondo: Canvas; --morbido: #8881; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { font: 15px/1.5 system-ui, sans-serif; display: flex; flex-direction: column; background: var(--fondo); }
+  header { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--bordo); }
+  header h1 { font-size: 16px; margin: 0 8px 0 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  button { font: inherit; padding: 7px 14px; border: 1px solid var(--bordo); border-radius: 8px;
+           background: transparent; color: inherit; cursor: pointer; }
+  button:hover { border-color: var(--acceso); }
+  button.primario { background: var(--acceso); border-color: var(--acceso); color: #000; font-weight: 600; }
+  button:disabled { opacity: .4; cursor: default; }
+  #stato { margin-left: auto; font-size: 13px; opacity: .75; text-align: right; cursor: pointer; max-width: 50%;
+           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #stato.attivo::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+                          background: var(--acceso); margin-right: 6px; animation: pulsa 1s infinite alternate; }
+  @keyframes pulsa { to { opacity: .3; } }
+  main { flex: 1; position: relative; }
+  iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .vuoto { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; opacity: .7; gap: 12px; }
+  .vuoto div { display: flex; gap: 8px; justify-content: center; }
+
+  dialog { border: 1px solid var(--bordo); border-radius: 12px; padding: 0; width: min(860px, 94vw);
+           max-height: 86vh; background: var(--fondo); color: inherit; }
+  dialog[open] { display: flex; flex-direction: column; }
+  dialog::backdrop { background: #0006; }
+  .testa { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--bordo); }
+  .testa h2 { font-size: 16px; margin: 0; flex: 1; }
+  .chiudi { border: 0; font-size: 22px; line-height: 1; padding: 2px 8px; }
+  .corpo { overflow: auto; padding: 8px 16px; flex: 1; }
+  .piede { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 12px 16px; border-top: 1px solid var(--bordo); }
+  .piede .spinta { margin-left: auto; }
+  input[type=search], input[type=text], select { font: inherit; padding: 6px 10px; border: 1px solid var(--bordo);
+           border-radius: 8px; background: transparent; color: inherit; }
+  .album { font-weight: 600; margin: 12px 0 4px; opacity: .8; }
+  .voce { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
+  .voce:hover { background: var(--morbido); }
+  .voce .nome { flex: 1; }
+  .voce .tipo { opacity: .5; font-size: 13px; }
+  .voce.aperta { color: var(--acceso); font-weight: 600; }
+  .percorso { display: flex; gap: 6px; flex: 1; }
+  .percorso input { flex: 1; min-width: 0; }
+  .lavoro { display: grid; grid-template-columns: 110px 1fr; gap: 2px 10px; padding: 8px 0; border-bottom: 1px solid var(--bordo); }
+  .lavoro .esito { font-size: 13px; font-weight: 600; }
+  .lavoro .dett { grid-column: 2; font-size: 12px; opacity: .65; font-family: ui-monospace, monospace;
+                  white-space: pre-wrap; word-break: break-all; }
+  .esito.fatta { color: #3a9a4a; } .esito.errore { color: #d04040; } .esito.lavorazione { color: var(--acceso); }
+  label.opz { display: flex; align-items: center; gap: 6px; }
+</style>
+
+<header>
+  <h1 id="titolo">Tablatura</h1>
+  <button id="bApri">Apri</button>
+  <button id="bImporta">Importa</button>
+  <span id="stato" title="Mostra la coda"></span>
+</header>
+<main>
+  <iframe id="foglio" hidden></iframe>
+  <div class="vuoto" id="vuoto">
+    <p>Nessuna canzone aperta.</p>
+    <div><button data-vai="apri">Apri una canzone</button><button data-vai="importa" class="primario">Importa</button></div>
+  </div>
+</main>
+
+<dialog id="dApri">
+  <div class="testa"><h2>Apri</h2><input type="search" id="cerca" placeholder="Cerca…"><button class="chiudi" aria-label="Chiudi">×</button></div>
+  <div class="corpo" id="elenco"></div>
+  <div class="piede">
+    <span id="selApri" style="opacity:.7;font-size:13px">Clic su una canzone per aprirla qui. Spunta più canzoni per aprirle in schede.</span>
+    <button class="spinta" id="bSchede" disabled>Apri le spuntate in schede</button>
+  </div>
+</dialog>
+
+<dialog id="dImporta">
+  <div class="testa">
+    <h2>Importa</h2>
+    <div class="percorso">
+      <button id="bSu" title="Cartella sopra">↑</button>
+      <button id="bMusica" title="Torna a Musica">Musica</button>
+      <input type="text" id="dove" spellcheck="false" title="Scrivi una cartella e premi Invio">
+    </div>
+    <button class="chiudi" aria-label="Chiudi">×</button>
+  </div>
+  <div class="corpo" id="sfoglia"></div>
+  <div class="piede">
+    <label class="opz">Strumento
+      <select id="strumento"><option value="basso">basso</option><option value="basso5">basso 5 corde</option>
+        <option value="chitarra">chitarra</option><option value="chitarra-dropd">chitarra drop D</option></select></label>
+    <label class="opz"><input type="checkbox" id="testo"> testo</label>
+    <label class="opz">lingua
+      <select id="lingua"><option value="en">inglese</option><option value="it">italiano</option><option value="es">spagnolo</option>
+        <option value="fr">francese</option><option value="">la indovina</option></select></label>
+    <button id="bTutto">Spunta tutto</button>
+    <button class="spinta primario" id="bVia" disabled>Importa</button>
+  </div>
+</dialog>
+
+<dialog id="dCoda">
+  <div class="testa"><h2>Canzoni in lavorazione</h2><button class="chiudi" aria-label="Chiudi">×</button></div>
+  <div class="corpo" id="lavori"></div>
+  <div class="piede"><button class="spinta" id="bSvuota">Togli quelle finite</button></div>
+</dialog>
+
+<script>
+const $ = id => document.getElementById(id);
+const api = (url, corpo) => fetch(url, corpo === undefined ? {} :
+  { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo) }).then(r => r.json());
+const percorsoTab = id => "/tab/" + id.split("/").map(encodeURIComponent).join("/") + "/tablatura.html";
+
+let aperta = null;
+let canzoni = [];
+
+for (const d of document.querySelectorAll("dialog")) {
+  d.querySelector(".chiudi").onclick = () => d.close();
+  d.addEventListener("click", e => { if (e.target === d) d.close(); });
+}
+
+function apri(id) {
+  aperta = id;
+  $("foglio").src = percorsoTab(id);
+  $("foglio").hidden = false;
+  $("vuoto").hidden = true;
+  $("titolo").textContent = id.split("/")[1];
+  document.title = id.split("/")[1] + " — Tablatura";
+  api("/api/preferenze", { ultima: id });
+}
+
+// ---------------------------------------------------------------- Apri
+async function mostraApri() {
+  canzoni = await api("/api/canzoni");
+  $("cerca").value = "";
+  disegnaElenco();
+  $("dApri").showModal();
+  $("cerca").focus();
+}
+function disegnaElenco() {
+  const filtro = $("cerca").value.toLowerCase();
+  const el = $("elenco");
+  el.textContent = "";
+  let album = null;
+  const visibili = canzoni.filter(c => (c.album + " " + c.canzone).toLowerCase().includes(filtro));
+  if (!visibili.length) el.innerHTML = `<p style="opacity:.6">${canzoni.length ? "Nessuna canzone trovata." : "Non c'è ancora nessuna canzone lavorata: usa Importa."}</p>`;
+  for (const c of visibili) {
+    if (c.album !== album) {
+      album = c.album;
+      const t = document.createElement("div");
+      t.className = "album"; t.textContent = album; el.append(t);
+    }
+    const r = document.createElement("label");
+    r.className = "voce" + (c.id === aperta ? " aperta" : "");
+    r.innerHTML = `<input type="checkbox"><span class="nome"></span>`;
+    r.querySelector(".nome").textContent = c.canzone;
+    const spunta = r.querySelector("input");
+    spunta.dataset.id = c.id;
+    spunta.onchange = contaSpuntate;
+    r.querySelector(".nome").onclick = e => { e.preventDefault(); apri(c.id); $("dApri").close(); };
+    el.append(r);
+  }
+  contaSpuntate();
+}
+function contaSpuntate() {
+  const n = $("elenco").querySelectorAll("input:checked").length;
+  $("bSchede").disabled = !n;
+  $("bSchede").textContent = n ? `Apri le ${n} spuntate in schede` : "Apri le spuntate in schede";
+}
+$("cerca").oninput = disegnaElenco;
+$("bSchede").onclick = () => {
+  for (const s of $("elenco").querySelectorAll("input:checked")) window.open(percorsoTab(s.dataset.id), "_blank");
+  $("dApri").close();
+};
+
+// ---------------------------------------------------------------- Importa
+let qui = null;
+async function vaiA(dove) {
+  qui = await api("/api/sfoglia" + (dove ? "?dove=" + encodeURIComponent(dove) : ""));
+  $("dove").value = qui.dove;
+  const el = $("sfoglia");
+  el.textContent = "";
+  if (!qui.cartelle.length && !qui.canzoni.length) el.innerHTML = `<p style="opacity:.6">Cartella vuota.</p>`;
+  const riga = (nome, cartella) => {
+    const r = document.createElement("label");
+    r.className = "voce";
+    r.innerHTML = `<input type="checkbox"><span class="nome"></span><span class="tipo"></span>`;
+    r.querySelector(".nome").textContent = (cartella ? "📁 " : "♪ ") + nome;
+    r.querySelector(".tipo").textContent = cartella ? "apri ›" : "";
+    const spunta = r.querySelector("input");
+    spunta.dataset.percorso = qui.dove.replace(/\/$/, "") + "/" + nome;
+    spunta.onchange = contaDaImportare;
+    if (cartella) r.querySelector(".nome").onclick = r.querySelector(".tipo").onclick =
+      e => { e.preventDefault(); vaiA(spunta.dataset.percorso); };
+    el.append(r);
+  };
+  qui.cartelle.forEach(n => riga(n, true));
+  qui.canzoni.forEach(n => riga(n, false));
+  contaDaImportare();
+  api("/api/preferenze", { cartella: qui.dove });
+}
+function contaDaImportare() {
+  const s = [...$("sfoglia").querySelectorAll("input:checked")];
+  $("bVia").disabled = !s.length;
+  $("bVia").textContent = s.length ? `Importa (${s.length})` : "Importa";
+}
+async function mostraImporta() {
+  const { preferenze: p } = await api("/api/stato");
+  if (p.strumento) $("strumento").value = p.strumento;
+  $("testo").checked = p.testo ?? true;
+  if (p.lingua !== undefined) $("lingua").value = p.lingua;
+  await vaiA(p.cartella);
+  $("dImporta").showModal();
+}
+$("bSu").onclick = () => vaiA(qui.su);
+$("bMusica").onclick = () => vaiA(qui.musica);
+$("dove").onkeydown = e => { if (e.key === "Enter") vaiA($("dove").value); };
+$("testo").onchange = () => { $("lingua").disabled = !$("testo").checked; };
+$("bTutto").onclick = () => {
+  const tutte = [...$("sfoglia").querySelectorAll("input")];
+  const accendi = tutte.some(s => !s.checked);
+  tutte.forEach(s => { s.checked = accendi; });
+  contaDaImportare();
+};
+$("bVia").onclick = async () => {
+  const percorsi = [...$("sfoglia").querySelectorAll("input:checked")].map(s => s.dataset.percorso);
+  const { accodate } = await api("/api/importa", {
+    percorsi, strumento: $("strumento").value, testo: $("testo").checked, lingua: $("lingua").value,
+  });
+  $("dImporta").close();
+  if (!accodate) alertino("Lì dentro non ho trovato canzoni.");
+  aggiorna();
+};
+function alertino(testo) { $("stato").textContent = testo; }
+
+// ---------------------------------------------------------------- la coda
+let giaFatte = new Set();
+async function aggiorna() {
+  let dati;
+  try { dati = await api("/api/stato"); } catch { $("stato").textContent = "Il programma si è chiuso: riaprilo dall'icona."; return; }
+  const coda = dati.coda;
+  const corso = coda.find(l => l.stato === "in lavorazione");
+  const attesa = coda.filter(l => l.stato === "in attesa").length;
+  const fatte = coda.filter(l => l.stato === "fatta");
+  const errori = coda.filter(l => l.stato === "errore").length;
+  $("stato").classList.toggle("attivo", !!corso);
+  if (corso) {
+    const n = coda.indexOf(corso) + 1;
+    $("stato").textContent = `${n} di ${coda.length}: ${corso.titolo} — ${corso.dettaglio || "comincio…"}`;
+  } else if (coda.length) {
+    $("stato").textContent = `Fatte ${fatte.length} di ${coda.length}` + (errori ? ` · ${errori} con errore` : "");
+  } else $("stato").textContent = "";
+  // Se non c'è niente aperto, la prima canzone pronta si apre da sola.
+  for (const l of fatte) {
+    if (!giaFatte.has(l.id)) { giaFatte.add(l.id); if (!aperta) apri(l.id); }
+  }
+  if ($("dCoda").open) disegnaCoda(coda);
+}
+function disegnaCoda(coda) {
+  const el = $("lavori");
+  el.textContent = "";
+  if (!coda.length) el.innerHTML = `<p style="opacity:.6">Niente in coda.</p>`;
+  for (const l of coda) {
+    const r = document.createElement("div");
+    r.className = "lavoro";
+    const classe = { "fatta": "fatta", "errore": "errore", "in lavorazione": "lavorazione" }[l.stato] || "";
+    r.innerHTML = `<span class="esito ${classe}"></span><span class="nome"></span><span class="dett"></span>`;
+    r.querySelector(".esito").textContent = l.stato;
+    r.querySelector(".nome").textContent = `${l.album} — ${l.titolo}`;
+    r.querySelector(".dett").textContent = l.stato === "errore" ? l.registro.slice(-8).join("\n") : l.dettaglio;
+    if (l.stato === "fatta") { r.style.cursor = "pointer"; r.onclick = () => { apri(l.id); $("dCoda").close(); }; }
+    el.append(r);
+  }
+}
+$("stato").onclick = async () => { const { coda } = await api("/api/stato"); disegnaCoda(coda); $("dCoda").showModal(); };
+$("bSvuota").onclick = async () => { await api("/api/svuota", {}); aggiorna(); };
+
+$("bApri").onclick = mostraApri;
+$("bImporta").onclick = mostraImporta;
+for (const b of document.querySelectorAll("[data-vai]")) b.onclick = b.dataset.vai === "apri" ? mostraApri : mostraImporta;
+
+(async () => {
+  const [{ preferenze, coda }, tutte] = await Promise.all([api("/api/stato"), api("/api/canzoni")]);
+  coda.filter(l => l.stato === "fatta").forEach(l => giaFatte.add(l.id));
+  if (preferenze.ultima && tutte.some(c => c.id === preferenze.ultima)) apri(preferenze.ultima);
+  aggiorna();
+  setInterval(aggiorna, 2000);
+})();
+</script>
+</html>

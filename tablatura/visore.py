@@ -101,8 +101,13 @@ PAGINA = """<!doctype html>
                font-weight: 600; font-size: 13px; }
   .diagramma.ora { border-color: var(--acceso); color: var(--acceso); box-shadow: 0 0 0 1px var(--acceso); }
   .diagramma svg { display: block; }
-  body.soloaccordi .corda { display: none; }
-  body.soloaccordi .rigo { font-size: 17px; }
+  #canzoniere { display: none; font: 18px/1.5 ui-monospace, monospace; }
+  body.soloaccordi #tab { display: none; }
+  body.soloaccordi #canzoniere { display: block; }
+  .frase { white-space: pre; padding: 6px 10px; margin-bottom: 8px; border-radius: 8px; cursor: pointer;
+           border-left: 3px solid transparent; overflow-x: auto; }
+  .frase.ora { border-left-color: var(--acceso); background: #e8a33d14; }
+  .frase .accordi { margin-bottom: 0; }
 </style>
 <h1>__TITOLO__</h1>
 <p class="nota">Tablatura per __STRUMENTO__ · __BPM__ bpm · tutto in locale, niente esportazione</p>
@@ -122,6 +127,7 @@ PAGINA = """<!doctype html>
 </div>
 <div id="diagrammi"></div>
 <div id="tab"></div>
+<div id="canzoniere"></div>
 
 <script>
 const DATI = __DATI__;
@@ -257,12 +263,16 @@ function diagramma(forma) {
   else {
     const vista = document.getElementById("vista");
     vista.hidden = false;
-    for (const b of vista.querySelectorAll("button")) {
-      b.onclick = () => {
-        document.body.classList.toggle("soloaccordi", b.dataset.vista === "accordi");
-        for (const x of vista.querySelectorAll("button")) x.classList.toggle("attivo", x === b);
-      };
-    }
+    const scegliVista = nome => {
+      document.body.classList.toggle("soloaccordi", nome === "accordi");
+      for (const x of vista.querySelectorAll("button")) x.classList.toggle("attivo", x.dataset.vista === nome);
+      try { localStorage.setItem("vista", nome); } catch {}
+    };
+    for (const b of vista.querySelectorAll("button")) b.onclick = () => scegliVista(b.dataset.vista);
+    // La vista scelta l'ultima volta vale anche per la canzone dopo.
+    let ricordata = location.hash === "#accordi" ? "accordi" : null;
+    try { ricordata ??= localStorage.getItem("vista"); } catch {}
+    if (ricordata === "accordi") scegliVista("accordi");
   }
 }
 
@@ -331,7 +341,103 @@ function disegna() {
   acceso = null;
 }
 
+// Accordi e testo, come su un canzoniere: una riga per frase cantata, che
+// parte da sinistra, con ogni accordo sopra la parola su cui arriva. Le parti
+// senza voce diventano una riga di soli accordi.
+let frasi = [];          // { el, da, a } in secondi
+let paroleC = [], accordiC = [], fraseAccesa = -1;
+function disegnaCanzoniere() {
+  const el = document.getElementById("canzoniere");
+  const parole = DATI.parole || [];
+  el.textContent = "";
+  frasi = []; paroleC = new Array(parole.length); accordiC = new Array(accordi.length);
+  // Le frasi: si va a capo dopo una pausa, o dopo un punto se la riga è già lunga.
+  const gruppi = [];
+  let corrente = [];
+  parole.forEach((p, i) => {
+    const prima = parole[i - 1];
+    const lunga = corrente.reduce((n, j) => n + parole[j].testo.length + 1, 0);
+    if (corrente.length && (p.quando - prima.quando > 2.2 || (/[.?!,]$/.test(prima.testo) && lunga > 28) || lunga > 60)) {
+      gruppi.push(corrente); corrente = [];
+    }
+    corrente.push(i);
+  });
+  if (corrente.length) gruppi.push(corrente);
+
+  let k = 0;
+  const fine = (guida.duration || 1e9);
+  const soliAccordi = (finoA) => {
+    // Gli accordi suonati prima della prossima frase, tutti su una riga.
+    const qui = [];
+    while (k < accordi.length && accordi[k].quando < finoA - 0.3) qui.push(k++);
+    if (!qui.length) return;
+    const riga = document.createElement("div");
+    riga.className = "frase";
+    const sopra = document.createElement("div");
+    sopra.className = "accordi";
+    qui.forEach((j, n) => {
+      if (n) sopra.append("   ");
+      const span = document.createElement("span");
+      span.className = "accordo"; span.textContent = accordi[j].nome;
+      sopra.append(span); accordiC[j] = span;
+    });
+    riga.append(sopra);
+    const da = accordi[qui[0]].quando;
+    riga.onclick = () => audio.forEach(x => { x.currentTime = da; });
+    el.append(riga);
+    frasi.push({ el: riga, da, a: finoA });
+  };
+  gruppi.forEach((g, n) => {
+    const da = parole[g[0]].quando;
+    const a = n + 1 < gruppi.length ? parole[gruppi[n + 1][0]].quando : fine;
+    soliAccordi(da);
+    const riga = document.createElement("div");
+    riga.className = "frase";
+    const sopra = document.createElement("div");
+    sopra.className = "accordi";
+    const sotto = document.createElement("div");
+    let colSopra = 0, colSotto = 0;
+    g.forEach((i, m) => {
+      const parola = parole[i];
+      const finoA = m + 1 < g.length ? parole[g[m + 1]].quando : a;
+      if (m) { sotto.append(" "); colSotto++; }
+      // Gli accordi che arrivano mentre si canta questa parola, sopra di lei.
+      while (k < accordi.length && accordi[k].quando < finoA - 0.05) {
+        const dove = Math.max(colSotto, colSopra ? colSopra + 1 : 0);
+        sopra.append(" ".repeat(dove - colSopra));
+        const span = document.createElement("span");
+        span.className = "accordo"; span.textContent = accordi[k].nome;
+        sopra.append(span); accordiC[k] = span;
+        colSopra = dove + span.textContent.length;
+        k++;
+      }
+      const span = document.createElement("span");
+      span.className = "parola"; span.textContent = parola.testo;
+      sotto.append(span); paroleC[i] = span;
+      colSotto += parola.testo.length;
+    });
+    if (!sopra.childNodes.length) sopra.textContent = " ";
+    riga.append(sopra, sotto);
+    riga.onclick = () => audio.forEach(x => { x.currentTime = da; });
+    el.append(riga);
+    frasi.push({ el: riga, da, a });
+  });
+  soliAccordi(Infinity);
+  fraseAccesa = -1;
+}
+
 function seguiRighi(ora) {
+  if (document.body.classList.contains("soloaccordi")) {
+    const f = frasi.findIndex(x => ora >= x.da - 0.3 && ora < x.a - 0.3);
+    if (f !== fraseAccesa) {
+      frasi[fraseAccesa]?.el.classList.remove("ora");
+      if (f >= 0) {
+        frasi[f].el.classList.add("ora");
+        if (!guida.paused) frasi[f].el.scrollIntoView({ block: "center", behavior: "smooth" });
+      }
+      fraseAccesa = f;
+    }
+  }
   const cella = cellaDi(ora);
   const r = righi.findIndex(x => cella >= x.da && cella < x.a);
   if (r !== rigoAcceso) {
@@ -348,12 +454,16 @@ function seguiRighi(ora) {
   if (i !== parolaAccesa) {
     paroleEl[parolaAccesa]?.classList.remove("ora");
     paroleEl[i]?.classList.add("ora");
+    paroleC[parolaAccesa]?.classList.remove("ora");
+    paroleC[i]?.classList.add("ora");
     parolaAccesa = i;
   }
   let k = -1;
   while (k + 1 < accordi.length && accordi[k + 1].quando <= ora) k++;
   if (k !== accordoAcceso) {
     accordiEl[accordoAcceso]?.classList.remove("ora");
+    accordiC[accordoAcceso]?.classList.remove("ora");
+    accordiC[k]?.classList.add("ora");
     diagrammiEl.get(accordi[accordoAcceso]?.nome)?.classList.remove("ora");
     accordiEl[k]?.classList.add("ora");
     diagrammiEl.get(accordi[k]?.nome)?.classList.add("ora");
@@ -371,6 +481,8 @@ const scorri = document.getElementById("scorri");
 const tempo = document.getElementById("tempo");
 let acceso = null;
 disegna();
+disegnaCanzoniere();
+guida.addEventListener("loadedmetadata", disegnaCanzoniere);
 
 function orologio(s) {
   return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
@@ -416,6 +528,17 @@ setInterval(() => {
 """
 
 
+def pagina(titolo: str, strumento: str, bpm: float, tab: dict, tracce: list[dict]) -> str:
+    """La pagina di una canzone, come testo."""
+    return (
+        PAGINA.replace("__TITOLO__", titolo)
+        .replace("__STRUMENTO__", strumento)
+        .replace("__BPM__", f"{bpm:g}")
+        .replace("__DATI__", json.dumps(tab))
+        .replace("__TRACCE__", json.dumps(tracce))
+    )
+
+
 def scrivi(
     dove: Path,
     titolo: str,
@@ -425,12 +548,5 @@ def scrivi(
     tracce: list[dict],
 ) -> Path:
     """Scrive la pagina accanto alle tracce separate."""
-    pagina = (
-        PAGINA.replace("__TITOLO__", titolo)
-        .replace("__STRUMENTO__", strumento.nome)
-        .replace("__BPM__", f"{bpm:g}")
-        .replace("__DATI__", json.dumps(tab))
-        .replace("__TRACCE__", json.dumps(tracce))
-    )
-    dove.write_text(pagina, encoding="utf-8")
+    dove.write_text(pagina(titolo, strumento.nome, bpm, tab, tracce), encoding="utf-8")
     return dove
