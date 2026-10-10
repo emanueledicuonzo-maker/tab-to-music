@@ -70,6 +70,7 @@ def affina(
     scarto: float = 0.05,
     passi_bpm: int = 20,
     passi_fase: int = 24,
+    rapporti: tuple[float, ...] = RAPPORTI,
 ) -> tuple[float, float]:
     """Ritocca tempo e fase finché la griglia non passa per le note vere.
 
@@ -81,12 +82,17 @@ def affina(
     livelli metrici vicini — metà, doppio, puntato — e si tiene quello su cui
     cadono più note. A parità, vince il tempo più vicino a quello rilevato:
     il livello si scavalca solo con una prova chiara.
+
+    Quando il tempo viene dalla traccia della batteria il livello è già
+    giusto, e si passa `rapporti=(1,)`: su un live suonato largo le note
+    cadono sulla griglia solo una volta su due, e la copertura sceglierebbe a
+    caso (Killing in the Name, 81 bpm, diventava 112).
     """
     if not inizi or bpm <= 0:
         return bpm, partenza
 
     candidati: list[tuple[float, float, float]] = []
-    for rapporto in RAPPORTI:
+    for rapporto in rapporti:
         base = bpm * rapporto
         if not BPM_MINIMO <= base <= BPM_MASSIMO:
             continue

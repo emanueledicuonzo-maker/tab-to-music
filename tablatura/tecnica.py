@@ -19,6 +19,7 @@ passata per tutte le note intermedie.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -151,18 +152,76 @@ def dalle_curve(
     return segni
 
 
-def ascolta(traccia: Path, eventi: list[Evento], grave: float = 35.0, acuta: float = 1200.0) -> list[str]:
-    """Riconosce le tecniche sulla traccia separata dello strumento."""
+@lru_cache(maxsize=2)
+def curve(traccia: Path, grave: float, acuta: float) -> tuple[np.ndarray, np.ndarray]:
+    """L'altezza in semitoni e la forza degli attacchi, a passi di SALTO.
+
+    È il conto lungo (un minuto a canzone): lo usano sia i segni sia le note
+    ritrovate dai colpi, quindi si fa una volta sola.
+    """
     import librosa
 
     suono, _ = librosa.load(traccia, sr=SR, mono=True)
     f0, _, _ = librosa.pyin(suono, fmin=grave, fmax=acuta, sr=SR, frame_length=2048, hop_length=SALTO)
     attacchi = librosa.onset.onset_strength(y=suono, sr=SR, hop_length=SALTO)
     lunghezza = min(len(f0), len(attacchi))
+    return semitoni(f0[:lunghezza]), attacchi[:lunghezza]
+
+
+def ascolta(traccia: Path, eventi: list[Evento], grave: float = 35.0, acuta: float = 1200.0) -> list[str]:
+    """Riconosce le tecniche sulla traccia separata dello strumento."""
+    altezza, attacchi = curve(Path(traccia), grave, acuta)
     ordine = sorted(range(len(eventi)), key=lambda i: eventi[i].inizio)
-    segni = dalle_curve([eventi[i] for i in ordine], semitoni(f0[:lunghezza]), attacchi[:lunghezza], SALTO / SR)
+    segni = dalle_curve([eventi[i] for i in ordine], altezza, attacchi, SALTO / SR)
     # Si restituiscono nell'ordine in cui sono arrivati.
     fuori = [""] * len(eventi)
     for posto, i in enumerate(ordine):
         fuori[i] = segni[posto]
     return fuori
+
+
+def note_dai_colpi(
+    note: list,
+    altezza: np.ndarray,
+    attacchi: np.ndarray,
+    passo: float,
+    grave: int,
+    acuta: int,
+    percentile: float = 60,
+    vicino: float = 0.07,
+) -> list:
+    """Le note che il trascrittore non ha scritto, ritrovate dagli attacchi.
+
+    Sul basso distorto di Killing in the Name il trascrittore si perdeva un Re
+    ribattuto su quattro: l'attacco nella traccia c'è, la nota no. Dove c'è un
+    colpo chiaro (fra i più forti del pezzo) e nessuna nota parte lì vicino, si
+    aggiunge la nota con l'altezza che si sente subito dopo. Provato contro
+    BigBassTabs: 107 note in più, quasi tutte Re ribattuti, e nessuna nota
+    sbagliata in più.
+    """
+    from .strumenti import Nota
+
+    picchi = [
+        i for i in range(1, len(attacchi) - 1)
+        if attacchi[i] >= attacchi[i - 1] and attacchi[i] > attacchi[i + 1]
+    ]
+    if not picchi:
+        return list(note)
+    forti = np.array([attacchi[i] for i in picchi])
+    soglia = np.percentile(forti, percentile)
+    inizi = np.array(sorted(n.inizio for n in note)) if note else np.array([])
+    nuove = []
+    for i in picchi:
+        if attacchi[i] < soglia:
+            continue
+        t = i * passo
+        if len(inizi) and np.min(np.abs(inizi - t)) < vicino:
+            continue
+        tratto = altezza[i + 1 : i + 8]
+        tratto = tratto[~np.isnan(tratto)]
+        if len(tratto) < 4:
+            continue
+        midi = int(round(float(np.median(tratto))))
+        if grave <= midi <= acuta:
+            nuove.append(Nota(midi=midi, inizio=float(t), durata=0.12, intensita=0.6))
+    return sorted(list(note) + nuove, key=lambda n: n.inizio)

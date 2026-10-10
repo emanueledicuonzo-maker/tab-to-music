@@ -74,7 +74,10 @@ def main(righe: list[str] | None = None) -> int:
         from .metronomo import metronomo
 
         print("cerco il metronomo…")
-        bpm, trovata = metronomo(opzioni.canzone)
+        # La batteria separata dà il battito molto meglio del disco intero:
+        # sul disco intero Killing in the Name usciva al doppio (162 invece di 81).
+        dalla_batteria = "drums" in tracce
+        bpm, trovata = metronomo(tracce["drums"] if dalla_batteria else opzioni.canzone)
         partenza = trovata if partenza is None else partenza
         print(f"  {bpm} bpm, primo battito a {partenza}s")
     partenza = partenza or 0.0
@@ -95,10 +98,25 @@ def main(righe: list[str] | None = None) -> int:
             note = sposta(note, ottave)
             print("  le armoniche dicono che era scritta un'ottava sopra: abbassata")
 
+    if note and not opzioni.polifonico:
+        # I colpi senza nota: il trascrittore si perde molti ribattuti.
+        try:
+            from .tecnica import SALTO, SR, curve, note_dai_colpi
+            from .trascrivi import finestra
+
+            grave, acuta = finestra(strumento)
+            altezza, attacchi = curve(Path(isolata), grave, acuta)
+            prima = len(note)
+            note = note_dai_colpi(note, altezza, attacchi, SALTO / SR, strumento.nota_piu_grave, strumento.nota_piu_acuta)
+            print(f"  {len(note) - prima} note ritrovate dagli attacchi")
+        except Exception as errore:
+            print(f"  note dai colpi saltate: {errore}")
+
     if bpm and opzioni.bpm is None and note:
         from .metronomo import affina
 
-        bpm, partenza = affina([n.inizio for n in note], bpm, partenza)
+        rapporti = (1,) if "drums" in tracce else None
+        bpm, partenza = affina([n.inizio for n in note], bpm, partenza, **({"rapporti": rapporti} if rapporti else {}))
         print(f"  tempo affinato sulle note: {bpm} bpm")
 
     scartate = fuori_estensione(note, strumento)

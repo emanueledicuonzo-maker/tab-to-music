@@ -58,3 +58,18 @@ def test_trillo():
         eventi.append(Evento(k * .1, nota, 2, (k + 1) * .1))
     altezza, attacchi = curve(pezzi, 0.7)
     assert dalle_curve(eventi, altezza, attacchi, PASSO) == ["tr", "h", "p", "h", "p", "h"]
+
+
+def test_note_dai_colpi_ritrova_i_ribattuti():
+    from tablatura.strumenti import Nota
+    from tablatura.tecnica import note_dai_colpi
+
+    # Quattro Re ribattuti: il trascrittore ne ha scritti due, gli attacchi sono quattro.
+    altezza = np.full(200, 38.0)
+    attacchi = np.zeros(200)
+    for i in (10, 50, 90, 130):
+        attacchi[i] = 1.0
+    scritte = [Nota(38, 0.10, 0.3), Nota(38, 0.90, 0.3)]
+    tutte = note_dai_colpi(scritte, altezza, attacchi, 0.01, 26, 67, percentile=0)
+    assert [round(n.inizio, 2) for n in tutte] == [0.1, 0.5, 0.9, 1.3]
+    assert all(n.midi == 38 for n in tutte)
