@@ -54,7 +54,7 @@ def dalle_curve(
     attacchi: np.ndarray,
     passo: float,
     legato_max: float = 0.4,
-    soglia_attacco: float = 0.45,
+    soglia_attacco: float = 0.35,
 ) -> list[str]:
     """Il segno di ogni nota ("" se suonata normale), nello stesso ordine.
 
@@ -78,9 +78,12 @@ def dalle_curve(
         fine = e.fine
         if fine is None:
             fine = eventi[i + 1].inizio if i + 1 < len(eventi) else e.inizio + 0.5
-        a, b = quadro(e.inizio + 0.03), quadro(fine - 0.02)
+        a, b = quadro(e.inizio + 0.03), quadro(fine - 0.05)
         tratto = altezza[a : b + 1] - e.midi if b > a else np.array([])
+        # Via i buchi e i salti d'ottava del riconoscitore: non sono tecnica, sono errori.
         tratto = tratto[~np.isnan(tratto)]
+        tratto = tratto[np.abs(tratto) < 3]
+        liscio = len(tratto) < 2 or np.abs(np.diff(tratto)).max() < 0.6
 
         # Legato e glissato: stessa corda, la nota prima ancora viva, niente pennata.
         prima = eventi[i - 1] if i else None
@@ -89,7 +92,7 @@ def dalle_curve(
             and prima.corda == e.corda
             and prima.midi != e.midi
             and 0 < e.inizio - prima.inizio <= legato_max + 0.6
-            and (prima.fine is None or e.inizio - prima.fine < 0.06 or _sempre_suona(altezza, quadro(prima.fine), quadro(e.inizio)))
+            and _sempre_suona(altezza, quadro(prima.inizio + 0.03), quadro(e.inizio - 0.01))
             and forze[i] < soglia_attacco * tipica
         ):
             a, b = quadro(e.inizio - 0.12), quadro(e.inizio + 0.02)
@@ -103,19 +106,29 @@ def dalle_curve(
             elif abs(e.midi - prima.midi) <= 5:
                 segni[i] = "h" if e.midi > prima.midi else "p"
 
-        if len(tratto) >= 4 and not segni[i]:
-            # Bending: la nota sale di almeno tre quarti di tono e ci resta.
-            if np.percentile(tratto, 85) >= 0.75 and tratto[: max(2, len(tratto) // 5)].mean() < 0.4:
+        dopo = eventi[i + 1] if i + 1 < len(eventi) else None
+        if len(tratto) >= 6 and not segni[i] and liscio:
+            # Bending: la nota parte giusta, sale di almeno tre quarti di tono senza
+            # salti e ci resta per un po'. Se la nota dopo, sulla stessa corda, è
+            # proprio quella d'arrivo, era un legato o un glissato, non un bending.
+            salita = np.percentile(tratto, 85)
+            arrivo_uguale = dopo is not None and dopo.corda == e.corda and abs(dopo.midi - e.midi - salita) < 0.6
+            in_alto = (tratto > 0.6).sum() * passo
+            if 0.75 <= salita <= 2.5 and tratto[: max(2, len(tratto) // 5)].mean() < 0.3 and in_alto >= 0.08 and not arrivo_uguale:
                 segni[i] = "b"
                 continue
-        if len(tratto) * passo >= 0.3:
+        if len(tratto) * passo >= 0.35 and not segni[i] and liscio:
             # Vibrato: l'altezza attraversa la sua media più volte, poco ma con regolarità.
+            # Il tremolio del riconoscitore è disordinato; il vibrato vero è un'onda
+            # regolare fra 4 e 8 oscillazioni al secondo, e si vede nello spettro.
             centrato = tratto - np.median(tratto)
             ampiezza = np.percentile(np.abs(centrato), 80)
-            passaggi = int((np.diff(np.sign(centrato)) != 0).sum())
-            durata = len(tratto) * passo
-            if 0.08 <= ampiezza <= 1.0 and 4 <= passaggi / durata <= 16 and passaggi >= 4:
-                segni[i] = (segni[i] + "~") if segni[i] in ("", "h", "p") else segni[i]
+            spettro = np.abs(np.fft.rfft(centrato * np.hanning(len(centrato)))) ** 2
+            frequenze = np.fft.rfftfreq(len(centrato), passo)
+            banda = (frequenze >= 4) & (frequenze <= 8)
+            quota = spettro[banda].sum() / max(spettro[1:].sum(), 1e-12)
+            if 0.15 <= ampiezza <= 1.0 and quota >= 0.5:
+                segni[i] = "~"
 
     # Trillo: almeno quattro note di fila che alternano due altezze vicine, veloci.
     i = 0
