@@ -29,6 +29,19 @@
                           background: var(--acceso); box-shadow: 0 0 10px var(--acceso); margin-right: 8px; animation: pulsa .8s infinite alternate; }
   @keyframes pulsa { to { opacity: .25; } }
   main { flex: 1; position: relative; }
+  #avanzamento { padding: 10px 18px 12px; border-bottom: 1px solid var(--bordo); background: #0b0b14; cursor: pointer; }
+  #avanzamento .riga1 { display: flex; gap: 12px; align-items: baseline; font-weight: 700; }
+  #avConto { margin-left: auto; color: var(--tenue); font-weight: 500; font-size: 13px; }
+  #avFasi { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  #avFasi span { font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--bordo); color: var(--tenue); }
+  #avFasi span.fatta { color: #6bffa0; border-color: #6bffa055; }
+  #avFasi span.ora { color: #111; background: var(--acceso); border-color: var(--acceso); box-shadow: 0 0 14px #ffb02088;
+                     animation: pulsa .8s infinite alternate; }
+  .barra { height: 6px; border-radius: 6px; background: #ffffff10; overflow: hidden; }
+  .barra i { display: block; height: 100%; width: 0; border-radius: 6px; transition: width .6s;
+             background: linear-gradient(90deg, var(--acceso), var(--rosa), var(--ciano)); background-size: 200% 100%;
+             animation: scorre 1.6s linear infinite; }
+  @keyframes scorre { to { background-position: -200% 0; } }
   iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: var(--fondo); }
   .vuoto { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 18px;
            background: radial-gradient(700px 400px at 50% 40%, #ff3d8118, transparent 70%); }
@@ -52,7 +65,9 @@
            border-radius: 10px; background: #ffffff08; color: inherit; }
   select option { background: #111; }
   input[type=checkbox] { accent-color: var(--acceso); width: 16px; height: 16px; }
-  .album { font-size: 12px; text-transform: uppercase; letter-spacing: .14em; margin: 16px 0 4px; color: var(--ciano); }
+  .album { display: flex; align-items: center; gap: 12px; font-size: 12px; text-transform: uppercase; letter-spacing: .14em;
+           margin: 18px 0 6px; color: var(--ciano); }
+  .album img { width: 48px; height: 48px; border-radius: 8px; object-fit: cover; box-shadow: 0 6px 18px #0009; }
   .voce { display: flex; align-items: center; gap: 12px; padding: 7px 10px; border-radius: 10px; cursor: pointer; }
   .voce:hover { background: var(--morbido); }
   .voce .nome { flex: 1; }
@@ -75,6 +90,11 @@
   <button id="bImporta">Importa</button>
   <span id="stato" title="Mostra la coda"></span>
 </header>
+<div id="avanzamento" hidden>
+  <div class="riga1"><span id="avCanzone"></span><span id="avConto"></span></div>
+  <div id="avFasi"></div>
+  <div class="barra"><i id="avBarra"></i></div>
+</div>
 <main>
   <iframe id="foglio" hidden></iframe>
   <div class="vuoto" id="vuoto">
@@ -165,7 +185,10 @@ function disegnaElenco() {
     if (c.album !== album) {
       album = c.album;
       const t = document.createElement("div");
-      t.className = "album"; t.textContent = album; el.append(t);
+      t.className = "album";
+      if (c.copertina) { const img = document.createElement("img"); img.src = c.copertina; img.alt = ""; t.append(img); }
+      t.append(album);
+      el.append(t);
     }
     const r = document.createElement("label");
     r.className = "voce" + (c.id === aperta ? " aperta" : "");
@@ -261,6 +284,22 @@ async function aggiorna() {
   const fatte = coda.filter(l => l.stato === "fatta");
   const errori = coda.filter(l => l.stato === "errore").length;
   $("stato").classList.toggle("attivo", !!corso);
+  // La barra grande: quale canzone, a che fase, quanto manca in tutto.
+  $("avanzamento").hidden = !corso;
+  if (corso) {
+    const n = coda.indexOf(corso);
+    $("avCanzone").textContent = "Sto lavorando: " + corso.titolo;
+    $("avConto").textContent = `${n + 1} di ${coda.length}` + (attesa ? ` · ${attesa} in attesa` : "");
+    $("avFasi").textContent = "";
+    dati.fasi.forEach((nome, i) => {
+      const s = document.createElement("span");
+      s.textContent = nome;
+      s.className = i < corso.fase ? "fatta" : i === corso.fase ? "ora" : "";
+      $("avFasi").append(s);
+    });
+    const dentro = (Math.max(0, corso.fase) + 0.5) / dati.fasi.length;
+    $("avBarra").style.width = ((n + dentro) / coda.length * 100).toFixed(1) + "%";
+  }
   if (corso) {
     const n = coda.indexOf(corso) + 1;
     $("stato").textContent = `${n} di ${coda.length}: ${corso.titolo} — ${corso.dettaglio || "comincio…"}`;
@@ -289,6 +328,7 @@ function disegnaCoda(coda) {
     el.append(r);
   }
 }
+$("avanzamento").onclick = () => $("stato").click();
 $("stato").onclick = async () => { const { coda } = await api("/api/stato"); disegnaCoda(coda); $("dCoda").showModal(); };
 $("bSvuota").onclick = async () => { await api("/api/svuota", {}); aggiorna(); };
 

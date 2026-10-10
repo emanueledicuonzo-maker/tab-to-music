@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import mimetypes
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -23,6 +24,7 @@ from dataclasses import asdict, dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from . import copertina
 from .strumenti import STRUMENTI
 from .visore import pagina
 
@@ -71,12 +73,23 @@ class Lavoro:
     lingua: str
     stato: str = "in attesa"  # in attesa · in lavorazione · fatta · errore
     dettaglio: str = ""
+    fase: int = -1
     registro: list[str] = field(default_factory=list)
 
     @property
     def id(self) -> str:
         return f"{self.album}/{self.titolo}"
 
+
+# Le fasi del lavoro, riconosciute dalle righe che stampa il programma.
+FASI = [
+    ("separo", "separo le tracce"),
+    ("metronomo", "cerco il metronomo"),
+    ("trascrivo il ", "trascrivo le note"),
+    ("trascrivo il testo", "trascrivo il testo"),
+    ("riconosco gli accordi", "riconosco gli accordi"),
+]
+RUMORE = re.compile(r"^\d{4}-\d\d-\d\d|^[EWI]\d{4}|tensorflow|cuda|cudnn|cublas|oneDNN|TF-TRT|AVX|WARNING|rebuild|absl|^\s*warn", re.I)
 
 coda: list[Lavoro] = []
 serratura = threading.Lock()
@@ -112,9 +125,18 @@ def lavora() -> None:
             if not riga:
                 continue
             prossimo.registro.append(riga)
-            if not riga.startswith(("WARNING", "I0000", "W0000")) and "tensorflow" not in riga.lower():
-                prossimo.dettaglio = riga[:120]
+            if RUMORE.search(riga):
+                continue
+            for i, (inizio, nome) in enumerate(FASI):
+                if riga.startswith(inizio) and i > prossimo.fase:
+                    prossimo.fase = i
+            prossimo.dettaglio = riga[:120]
         esito = processo.wait()
+        if esito == 0:
+            try:
+                copertina.salva(Path(prossimo.canzone), TAB / prossimo.album)
+            except OSError:
+                pass
         prossimo.stato = "fatta" if esito == 0 else "errore"
 
 
@@ -142,7 +164,13 @@ def canzoni_fatte() -> list[dict]:
     if TAB.is_dir():
         for descrizione in sorted(TAB.glob("*/*/leggio.json")):
             cartella = descrizione.parent
-            fatte.append({"id": f"{cartella.parent.name}/{cartella.name}", "album": cartella.parent.name, "canzone": cartella.name})
+            immagine = copertina.di(cartella.parent)
+            fatte.append({
+                "id": f"{cartella.parent.name}/{cartella.name}",
+                "album": cartella.parent.name,
+                "canzone": cartella.name,
+                "copertina": f"/tab/{urllib.parse.quote(cartella.parent.name)}/{immagine.name}" if immagine else None,
+            })
     return fatte
 
 
@@ -153,7 +181,10 @@ def pagina_di(cartella: Path) -> str:
     bpm = 60.0 / (tab["durataCella"] * 4)
     tracce = [{"nome": f.stem, "file": urllib.parse.quote(f.name)} for f in sorted(cartella.glob("*.wav"))]
     nome = next((s.nome for s in STRUMENTI.values() if s.nome == tab.get("strumento")), tab.get("strumento", ""))
-    return pagina(cartella.name.replace("_", " "), nome, round(bpm, 2), tab, tracce)
+    immagine = copertina.di(cartella.parent)
+    return pagina(cartella.name.replace("_", " "), nome, round(bpm, 2), tab, tracce,
+                  copertina=f"../{urllib.parse.quote(immagine.name)}" if immagine else "",
+                  album=cartella.parent.name)
 
 
 def sfoglia(dove: str | None) -> dict:
@@ -213,7 +244,7 @@ class Risponditore(BaseHTTPRequestHandler):
         if percorso == "/api/stato":
             with serratura:
                 lavori = [asdict(l) | {"id": l.id, "registro": l.registro[-15:]} for l in coda]
-            return self.json({"coda": lavori, "preferenze": leggi_stato()})
+            return self.json({"coda": lavori, "fasi": [nome for _, nome in FASI], "preferenze": leggi_stato()})
         if percorso.startswith("/tab/"):
             return self.da_tab(percorso[len("/tab/"):])
         self.manda(b"non c'e'", "text/plain", 404)

@@ -9,6 +9,7 @@ restano dove sono, e la pagina non parla con nessuno.
 
 from __future__ import annotations
 
+import html
 import json
 from pathlib import Path
 
@@ -76,10 +77,10 @@ PAGINA = """<!doctype html>
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
-  html { background: var(--fondo); }
-  body { --respiro: 0; margin: 0; padding: 0 28px 80px; font: 15px/1.5 system-ui, "Ubuntu", sans-serif; color: var(--testo);
+  html { --respiro: 0; min-height: 100%;
          background: radial-gradient(1200px 600px at 15% -10%, rgb(255 61 129 / calc(.10 + var(--respiro) * .25)), transparent 60%),
-                     radial-gradient(1000px 500px at 95% 0%, #2de2e61c, transparent 60%), var(--fondo);
+                     radial-gradient(1000px 500px at 95% 0%, #2de2e61c, transparent 60%), var(--fondo); background-attachment: fixed; }
+  body { margin: 0; padding: 0 28px 80px; font: 15px/1.5 system-ui, "Ubuntu", sans-serif; color: var(--testo);
          min-height: 100vh; overflow-x: hidden; }
   #lampo { position: fixed; inset: 0; pointer-events: none; z-index: 50; opacity: 0;
            background: radial-gradient(circle at 50% 30%, #ffffff, #ffb020 40%, transparent 75%); mix-blend-mode: screen; }
@@ -89,6 +90,14 @@ PAGINA = """<!doctype html>
   button.attivo { border-color: var(--acceso); color: var(--acceso); box-shadow: inset 0 0 12px #ffb02022; }
 
   .testata { display: grid; grid-template-columns: 1fr auto auto; gap: 28px; align-items: center; padding: 26px 0 18px; }
+  #alone { position: fixed; inset: -10%; z-index: -1; background-size: cover; background-position: center;
+           filter: blur(90px) saturate(1.6); opacity: .22; pointer-events: none; }
+  #alone[style*="url('')"] { display: none; }
+  .chi { display: flex; align-items: center; gap: 22px; min-width: 0; }
+  #copertina { width: 132px; height: 132px; flex: none; border-radius: 14px; object-fit: cover;
+               box-shadow: 0 18px 50px #000a, 0 0 0 1px #ffffff1a; }
+  #copertina[src=""] { display: none; }
+  .album { margin-top: 6px; color: var(--tenue); font-size: 14px; }
   .etichetta { font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: var(--tenue); }
   .etichetta b { color: var(--ciano); font-weight: 600; }
   h1 { font-size: clamp(22px, 2.6vw, 38px); line-height: 1.1; margin: 6px 0 0; font-weight: 800; letter-spacing: -.02em;
@@ -167,10 +176,15 @@ PAGINA = """<!doctype html>
   ::-webkit-scrollbar { height: 8px; width: 10px; } ::-webkit-scrollbar-thumb { background: #ffffff22; border-radius: 8px; }
 </style>
 <div id="lampo"></div>
+<div id="alone" style="background-image:url('__COPERTINA__')"></div>
 <section class="testata">
-  <div>
-    <div class="etichetta">Tablatura · <b>__STRUMENTO__</b> · __BPM__ bpm</div>
-    <h1>__TITOLO__</h1>
+  <div class="chi">
+    <img id="copertina" src="__COPERTINA__" alt="">
+    <div>
+      <div class="etichetta">Tablatura · <b>__STRUMENTO__</b> · __BPM__ bpm</div>
+      <h1>__TITOLO__</h1>
+      <div class="album">__ALBUM__</div>
+    </div>
   </div>
   <div id="battiti" title="I movimenti della battuta"><i></i><i></i><i></i><i></i></div>
   <div class="ora-accordo"><span id="accordoOra">—</span><span id="accordoDopo"></span></div>
@@ -697,7 +711,7 @@ function giro() {
   if (guida.paused && analisiTotale) disegnaSpettro();
   // Il bagliore dello sfondo respira coi bassi.
   bagliore = Math.max(bassi, bagliore * 0.9);
-  document.body.style.setProperty("--respiro", bagliore.toFixed(3));
+  document.documentElement.style.setProperty("--respiro", bagliore.toFixed(3));
 
   // I movimenti: il primo della battuta rosa, gli altri azzurri; sul primo, se le luci sono accese, un lampo.
   const n = Math.floor((ora - partenza) / BATTITO + 1e-6);
@@ -738,10 +752,14 @@ addEventListener("keydown", e => {
 """
 
 
-def pagina(titolo: str, strumento: str, bpm: float, tab: dict, tracce: list[dict]) -> str:
+def pagina(
+    titolo: str, strumento: str, bpm: float, tab: dict, tracce: list[dict], copertina: str = "", album: str = ""
+) -> str:
     """La pagina di una canzone, come testo."""
     return (
-        PAGINA.replace("__TITOLO__", titolo)
+        PAGINA.replace("__COPERTINA__", html.escape(copertina, quote=True))
+        .replace("__ALBUM__", html.escape(album))
+        .replace("__TITOLO__", titolo)
         .replace("__STRUMENTO__", strumento)
         .replace("__BPM__", f"{bpm:g}")
         .replace("__DATI__", json.dumps(tab))
