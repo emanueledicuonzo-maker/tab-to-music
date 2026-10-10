@@ -172,7 +172,25 @@ def main(righe: list[str] | None = None) -> int:
     if bpm:
         # Lo stesso contenuto della pagina, in un file che il leggio sul web
         # sa leggere: il lavoro pesante resta qui, la lettura va dove serve.
-        descrizione = dati(suonate, strumento, bpm=bpm, partenza=partenza, parole=dette, accordi=accordi)
+        segni = []
+        try:
+            from .tecnica import Evento, ascolta as tecniche
+            from .trascrivi import finestra
+
+            print("riconosco legati, glissati, bending e vibrato…")
+            grave, acuta = finestra(strumento)
+            segni = tecniche(
+                isolata,
+                [Evento(s.nota.inizio, s.nota.midi, s.posizione.corda, s.nota.fine) for s in suonate],
+                grave=grave,
+                acuta=acuta,
+            )
+            print(f"  {sum(1 for s in segni if s)} note con un segno")
+        except Exception as errore:  # i segni sono un di più: senza, la tablatura resta buona
+            print(f"  segni saltati: {errore}")
+        descrizione = dati(
+            suonate, strumento, bpm=bpm, partenza=partenza, parole=dette, accordi=accordi, segni=segni
+        )
         (dove / "leggio.json").write_text(json.dumps(descrizione), encoding="utf-8")
         pagina = dove / "tablatura.html"
         scrivi(

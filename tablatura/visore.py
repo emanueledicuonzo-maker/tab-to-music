@@ -29,26 +29,34 @@ def dati(
     partenza: float = 0.0,
     parole=(),
     accordi=(),
+    segni=(),
 ) -> dict:
     """La tablatura in una forma che il browser sa disegnare e far scorrere."""
     if suonate:
         partenza = allinea_partenza(partenza, min(s.nota.inizio for s in suonate), bpm, movimenti)
     battute = in_griglia(suonate, bpm, suddivisione, movimenti, partenza)
     cella = 60.0 / bpm / suddivisione
+    # Il segno di ogni nota (legato, glissato…), nella stessa casella in cui finisce la nota.
+    tecniche = {
+        (round((s.nota.inizio - partenza) / cella), s.posizione.corda): segno
+        for s, segno in zip(suonate, segni)
+        if segno
+    }
     per_battuta = movimenti * suddivisione
     note = []
     for b, battuta in enumerate(battute):
         for i, colonna in enumerate(battuta):
             for corda, tasto in colonna.items():
                 indice = b * per_battuta + i
-                note.append(
-                    {
-                        "corda": corda,
-                        "tasto": tasto,
-                        "cella": indice,
-                        "quando": round(partenza + indice * cella, 3),
-                    }
-                )
+                nota = {
+                    "corda": corda,
+                    "tasto": tasto,
+                    "cella": indice,
+                    "quando": round(partenza + indice * cella, 3),
+                }
+                if (indice, corda) in tecniche:
+                    nota["segno"] = tecniche[(indice, corda)]
+                note.append(nota)
     return {
         "strumento": strumento.nome,
         "corde": [NOMI_CORDE[n % 12] for n in strumento.corde],
@@ -163,6 +171,10 @@ PAGINA = """<!doctype html>
   .n { padding: 1px 0; border-radius: 4px; }
   .n.ora { background: var(--acceso); color: #000; box-shadow: 0 0 14px var(--acceso); }
   .accordi { font-weight: 800; color: var(--acceso); margin-bottom: 2px; }
+  .seg { color: var(--ciano); font-weight: 800; }
+  .n.ora .seg { color: #000; }
+  #legenda { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: -4px 0 14px; font-size: 13px; color: var(--tenue); }
+  #legenda b { color: var(--ciano); font-family: ui-monospace, monospace; margin-right: 4px; }
   .accordo.ora { color: #000; background: var(--acceso); border-radius: 4px; box-shadow: 0 0 14px var(--acceso); }
 
   #canzoniere { display: none; font: 20px/1.55 ui-monospace, "Ubuntu Mono", monospace; }
@@ -208,6 +220,7 @@ PAGINA = """<!doctype html>
   <button data-vista="tab" class="attivo">Tablatura</button><button data-vista="accordi">Accordi e testo</button>
 </div>
 <div id="diagrammi"></div>
+<div id="legenda" hidden></div>
 <div id="tab"></div>
 <div id="canzoniere"></div>
 
@@ -269,6 +282,8 @@ for (const t of tracce) {
 // cantate in quel tratto, ognuna sopra o sotto la casella in cui cade. Il testo serve a sapere dove si è
 // dentro un giro che si ripete uguale per tutto il pezzo.
 const CELLA = 2;
+const SPIEGA = { h: "legato in salita (hammer-on)", p: "legato in discesa (pull-off)", "/": "glissato in salita",
+                 "\\\\": "glissato in discesa", b: "bending", "~": "vibrato", tr: "trillo" };
 const PREFISSO = 3;  // " G|"
 const tab = document.getElementById("tab");
 const PB = DATI.perBattuta;
@@ -405,7 +420,16 @@ function disegna() {
         const nota = notaIn.get(`${corda}:${i}`);
         const span = document.createElement("span");
         span.className = "n";
-        span.textContent = nota ? String(nota.tasto).padEnd(CELLA, "-") : "-".repeat(CELLA);
+        if (nota && nota.segno) {
+          // h p / \ vanno prima del tasto (5h7), b ~ tr dopo (7b, 7~).
+          const prima = ["h", "p", "/", "\\\\"].includes(nota.segno);
+          const seg = `<b class="seg" title="${SPIEGA[nota.segno] || ""}">${nota.segno}</b>`;
+          const testo = prima ? seg + nota.tasto : nota.tasto + seg;
+          const lungo = String(nota.tasto).length + nota.segno.length;
+          span.innerHTML = testo + "-".repeat(Math.max(0, CELLA - lungo));
+        } else {
+          span.textContent = nota ? String(nota.tasto).padEnd(CELLA, "-") : "-".repeat(CELLA);
+        }
         if (nota) caselle.set(`${corda}:${i}`, span);
         riga.append(span);
       }
@@ -557,6 +581,19 @@ function seguiRighi(ora) {
     accordiEl[k]?.classList.add("ora");
     diagrammiEl.get(accordi[k]?.nome)?.classList.add("ora");
     accordoAcceso = k;
+  }
+}
+
+{
+  // La legenda dei segni, solo quelli che in questa canzone ci sono.
+  const usati = [...new Set(DATI.note.map(n => n.segno).filter(Boolean))];
+  const legenda = document.getElementById("legenda");
+  legenda.hidden = !usati.length;
+  for (const s of usati) {
+    const voce = document.createElement("span");
+    voce.innerHTML = `<b>${s}</b>`;
+    voce.append(SPIEGA[s] || "");
+    legenda.append(voce);
   }
 }
 

@@ -88,6 +88,7 @@ FASI = [
     ("trascrivo il ", "trascrivo le note"),
     ("trascrivo il testo", "trascrivo il testo"),
     ("riconosco gli accordi", "riconosco gli accordi"),
+    ("riconosco legati", "legati e bending"),
 ]
 RUMORE = re.compile(r"^\d{4}-\d\d-\d\d|^[EWI]\d{4}|tensorflow|cuda|cudnn|cublas|oneDNN|TF-TRT|AVX|WARNING|rebuild|absl|^\s*warn", re.I)
 
