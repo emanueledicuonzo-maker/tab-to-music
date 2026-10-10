@@ -91,6 +91,7 @@
   <h1 id="titolo"></h1>
   <button id="bApri">Apri</button>
   <button id="bImporta">Importa</button>
+  <button id="bInstalla" class="primario" hidden title="Installa Tablatura come app">Installa l'app</button>
   <span id="stato" title="Mostra la coda"></span>
 </header>
 <div id="avanzamento" hidden>
@@ -343,6 +344,12 @@ function disegnaCoda(coda) {
 $("avanzamento").onclick = () => $("stato").click();
 $("stato").onclick = async () => { const { coda } = await api("/api/stato"); disegnaCoda(coda); $("dCoda").showModal(); };
 $("bSvuota").onclick = async () => { await api("/api/svuota", {}); aggiorna(); };
+
+// Chrome dice quando l'app si può installare: allora compare il pulsante.
+let invito = null;
+addEventListener("beforeinstallprompt", e => { e.preventDefault(); invito = e; $("bInstalla").hidden = false; });
+$("bInstalla").onclick = async () => { if (!invito) return; invito.prompt(); await invito.userChoice; invito = null; $("bInstalla").hidden = true; };
+addEventListener("appinstalled", () => { $("bInstalla").hidden = true; });
 
 $("bApri").onclick = mostraApri;
 $("bImporta").onclick = mostraImporta;
