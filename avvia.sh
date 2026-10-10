@@ -136,12 +136,15 @@ apri() {
       --text="Non c'è ancora nessuna canzone lavorata: usa Importa."
     return
   fi
-  local scelto
-  while scelto=$(zenity --list --title="Tablatura: $(( ${#righe[@]} / 3 )) canzoni" \
-    --text="Doppio clic su una canzone per aprirla. Chiudi per tornare al menu." --width=800 --height=520 \
+  local scelte_pagine scelte_elenco
+  while scelte_pagine=$(zenity --list --multiple --separator=$'\n' \
+    --title="Tablatura: $(( ${#righe[@]} / 3 )) canzoni" \
+    --text="Seleziona una o più canzoni (Ctrl o Maiusc per sceglierne più di una), poi Apri.\nChiudi per tornare al menu." \
+    --ok-label="Apri" --cancel-label="Menu" --width=800 --height=520 \
     --column="Album" --column="Canzone" --column="File" --print-column=3 --hide-column=3 \
     "${righe[@]}"); do
-    [[ -n $scelto ]] && apri_pagina "$scelto"
+    mapfile -t scelte_elenco <<<"$scelte_pagine"
+    for p in "${scelte_elenco[@]}"; do [[ -n $p ]] && apri_pagina "$p"; done
   done
 }
 
