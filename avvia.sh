@@ -10,15 +10,17 @@ if ! flock -n 9; then
 fi
 
 audio='.*\.\(mp3\|flac\|wav\|ogg\|m4a\)'
+# Le canzoni lavorate stanno tutte qui, una cartella per album, così non si
+# mescolano con la musica vera e propria.
+TAB="$(xdg-user-dir MUSIC 2>/dev/null || echo "$HOME/Musica")/tab"
 filtro="Audio | *.mp3 *.flac *.wav *.ogg *.m4a *.MP3 *.FLAC *.WAV *.OGG *.M4A"
 
 apri_pagina() { xdg-open "$1" 9>&- >/dev/null 2>&1; }
 
-# Dove sta la pagina di una canzone: accanto, nella cartella «nome-tablatura».
-pagina_di() {
-  local f=$1 nome
-  nome=$(basename "${f%.*}")
-  echo "$(dirname "$f")/$nome-tablatura/tablatura.html"
+# Dove vanno i risultati di una canzone: tab/<album>/<canzone>.
+cartella_di() {
+  local f=$1
+  echo "$TAB/$(basename "$(dirname "$f")")/$(basename "${f%.*}")"
 }
 
 # Canzoni o cartella? Riempie l'array «scelte» (file, oppure una cartella).
@@ -63,7 +65,7 @@ importa() {
     canzoni=("${scelte[@]}")
   else
     # Le canzoni anche nelle sottocartelle, ma non quelle già separate da Demucs.
-    mapfile -t canzoni < <(find "${scelte[0]}" -type f -iregex "$audio" -not -path '*-tablatura/*' | sort)
+    mapfile -t canzoni < <(find "${scelte[0]}" -type f -iregex "$audio" -not -path '*-tablatura/*' -not -path "$TAB/*" | sort)
   fi
   if [[ ${#canzoni[@]} -eq 0 ]]; then
     zenity --info --title="Tablatura" --text="In quella cartella non ho trovato canzoni." --width=400
@@ -94,6 +96,7 @@ importa() {
       echo "$(( i * 100 / totale ))"
       echo "# $((i + 1)) di $totale: $(basename "${canzoni[$i]}")"
       .venv-311/bin/python -m tablatura "${canzoni[$i]}" --strumento "$strumento" "${opzioni[@]}" \
+        --dove "$(cartella_di "${canzoni[$i]}")" \
         >"$registri/$i.log" 2>&1
       echo $? >"$registri/$i.esito"
     done
@@ -123,38 +126,30 @@ importa() {
 }
 
 apri() {
-  scegli "apri" || return
-  local pagine=() mancano=() righe=() p
-  if [[ $tipo == canzoni ]]; then
-    for f in "${scelte[@]}"; do
-      p=$(pagina_di "$f")
-      if [[ -f $p ]]; then pagine+=("$p"); else mancano+=("$(basename "$f")"); fi
-    done
-    for p in "${pagine[@]}"; do apri_pagina "$p"; done
-    if [[ ${#mancano[@]} -gt 0 ]]; then
-      zenity --info --title="Tablatura" --width=450 \
-        --text="Queste non sono ancora state lavorate (usa Importa):\n\n$(printf '• %s\n' "${mancano[@]}")"
-    fi
-  else
-    # Tutte le canzoni già fatte in quella cartella e nelle sottocartelle.
-    while IFS= read -r p; do
-      righe+=("fatta" "$(basename "$(dirname "$p")" | sed 's/-tablatura$//')" "$p")
-    done < <(find "${scelte[0]}" -type f -path '*-tablatura/tablatura.html' | sort)
-    if [[ ${#righe[@]} -eq 0 ]]; then
-      zenity --info --title="Tablatura" --text="In quella cartella non c'è ancora nessuna canzone lavorata." --width=420
-    elif [[ ${#righe[@]} -eq 3 ]]; then
-      apri_pagina "${righe[2]}"
-    else
-      elenco_pagine "$(( ${#righe[@]} / 3 )) canzoni già fatte" "${righe[@]}"
-    fi
+  local righe=() p canzone album
+  while IFS= read -r p; do
+    canzone=$(dirname "$p"); album=$(dirname "$canzone")
+    righe+=("$(basename "$album")" "$(basename "$canzone")" "$p")
+  done < <(find "$TAB" -mindepth 3 -maxdepth 3 -type f -name tablatura.html 2>/dev/null | sort)
+  if [[ ${#righe[@]} -eq 0 ]]; then
+    zenity --info --title="Tablatura" --width=420 \
+      --text="Non c'è ancora nessuna canzone lavorata: usa Importa."
+    return
   fi
+  local scelto
+  while scelto=$(zenity --list --title="Tablatura: $(( ${#righe[@]} / 3 )) canzoni" \
+    --text="Doppio clic su una canzone per aprirla. Chiudi per tornare al menu." --width=800 --height=520 \
+    --column="Album" --column="Canzone" --column="File" --print-column=3 --hide-column=3 \
+    "${righe[@]}"); do
+    [[ -n $scelto ]] && apri_pagina "$scelto"
+  done
 }
 
 # Il menu: resta aperto finché non lo chiudi.
 while azione=$(zenity --list --title="Tablatura" --text="Cosa vuoi fare?" \
   --column="Azione" --column="" --width=420 --height=240 \
   "Importa" "lavora canzoni nuove" \
-  "Apri" "riapri quelle già fatte"); do
+  "Apri" "le canzoni già fatte, in Musica/tab"); do
   case $azione in
     Importa) importa ;;
     Apri) apri ;;
