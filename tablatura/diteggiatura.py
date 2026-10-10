@@ -95,9 +95,9 @@ def _costo_mano(mano: int | None, dopo: Posizione, corda_prima: int, pausa: floa
     urgenza = 1.0 / (1.0 + FRETTA * max(0.0, pausa))
     salto_corda = abs(corda_prima - dopo.corda)
     salto_tasto, _ = _sposta_mano(mano, dopo.tasto)
-    # Lo spostamento della mano si fa con calma se c'è tempo; la scelta della
-    # corda no, quella dipende da come si suona il giro.
-    return PESO_SALTO_TASTO * salto_tasto * urgenza + PESO_SALTO_CORDA * salto_corda + PESO_SCAVALCO * max(0, salto_corda - 1)
+    # Con calma la mano si sposta e cambia corda senza fatica; scavalcare una
+    # corda invece resta scomodo anche con tempo, perché si suona peggio.
+    return (PESO_SALTO_TASTO * salto_tasto + PESO_SALTO_CORDA * salto_corda) * urgenza + PESO_SCAVALCO * max(0, salto_corda - 1)
 
 
 def diteggia(note: list[Nota], strumento: Strumento) -> list[NotaSuonata]:
