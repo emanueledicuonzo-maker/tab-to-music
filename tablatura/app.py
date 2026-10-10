@@ -31,6 +31,7 @@ from .visore import pagina
 PORTA = 8777
 AUDIO = {".mp3", ".flac", ".wav", ".ogg", ".m4a"}
 RADICE = Path(__file__).resolve().parent.parent
+PWA = Path(__file__).resolve().parent / "pwa"
 
 
 def cartella_musica() -> Path:
@@ -251,6 +252,12 @@ class Risponditore(BaseHTTPRequestHandler):
             return self.json({"coda": lavori, "fasi": [nome for _, nome in FASI], "preferenze": leggi_stato()})
         if percorso.startswith("/tab/"):
             return self.da_tab(percorso[len("/tab/"):])
+        if percorso == "/sw.js" or percorso.startswith("/pwa/"):
+            file = PWA / Path(percorso).name
+            if file.is_file():
+                tipo = {".js": "text/javascript", ".webmanifest": "application/manifest+json", ".png": "image/png"}[file.suffix]
+                altre = {"Service-Worker-Allowed": "/"} if file.suffix == ".js" else None
+                return self.manda(file.read_bytes(), tipo, altre=altre)
         self.manda(b"non c'e'", "text/plain", 404)
 
     do_HEAD = do_GET

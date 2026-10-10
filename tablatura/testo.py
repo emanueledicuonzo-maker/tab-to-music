@@ -47,8 +47,11 @@ def ascolta(
         ) from errore
 
     trascrittore = WhisperModel(modello, device="cpu", compute_type="int8")
+    # Senza «condition_on_previous_text» il modello non si porta dietro la
+    # frase prima: sui ritornelli ripetuti (il finale di Killing in the Name,
+    # sedici volte la stessa riga) altrimenti ne salta la maggior parte.
     segmenti, _ = trascrittore.transcribe(
-        str(voce), word_timestamps=True, language=lingua
+        str(voce), word_timestamps=True, language=lingua, condition_on_previous_text=False
     )
     return [
         Parola(testo=parola.word.strip(), inizio=float(parola.start), durata=float(parola.end - parola.start))

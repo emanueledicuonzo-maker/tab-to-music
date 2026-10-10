@@ -3,6 +3,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tablatura</title>
+<link rel="manifest" href="/pwa/manifest.webmanifest">
+<link rel="icon" href="/pwa/icona-192.png">
+<meta name="theme-color" content="#0b0b14">
 <style>
   :root { color-scheme: dark; --bordo: #ffffff14; --acceso: #ffb020; --rosa: #ff3d81; --ciano: #2de2e6;
           --fondo: #06060b; --pannello: #ffffff08; --morbido: #ffffff0c; --testo: #eef0f6; --tenue: #9aa0b4; }
@@ -158,6 +161,7 @@ for (const d of document.querySelectorAll("dialog")) {
 
 function apri(id) {
   aperta = id;
+  try { localStorage.setItem("ultima", id); } catch {}
   $("foglio").src = percorsoTab(id);
   $("foglio").hidden = false;
   $("vuoto").hidden = true;
@@ -277,7 +281,15 @@ function alertino(testo) { $("stato").textContent = testo; }
 let giaFatte = new Set();
 async function aggiorna() {
   let dati;
-  try { dati = await api("/api/stato"); } catch { $("stato").textContent = "Il programma si è chiuso: riaprilo dall'icona."; return; }
+  try { dati = await api("/api/stato"); } catch { dati = { spento: true, coda: [], fasi: [] }; }
+  if (dati.spento) {
+    $("stato").classList.remove("attivo");
+    $("stato").textContent = "Programma spento: si riguardano le canzoni salvate, per importare riapri l'icona.";
+    $("avanzamento").hidden = true;
+    $("bImporta").disabled = true;
+    return;
+  }
+  $("bImporta").disabled = false;
   const coda = dati.coda;
   const corso = coda.find(l => l.stato === "in lavorazione");
   const attesa = coda.filter(l => l.stato === "in attesa").length;
@@ -337,9 +349,14 @@ $("bImporta").onclick = mostraImporta;
 for (const b of document.querySelectorAll("[data-vai]")) b.onclick = b.dataset.vai === "apri" ? mostraApri : mostraImporta;
 
 (async () => {
-  const [{ preferenze, coda }, tutte] = await Promise.all([api("/api/stato"), api("/api/canzoni")]);
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+  const [{ preferenze = {}, coda = [] }, tutte] = await Promise.all([
+    api("/api/stato").catch(() => ({})), api("/api/canzoni").catch(() => []),
+  ]);
   coda.filter(l => l.stato === "fatta").forEach(l => giaFatte.add(l.id));
-  if (preferenze.ultima && tutte.some(c => c.id === preferenze.ultima)) apri(preferenze.ultima);
+  let ultima = preferenze.ultima;
+  try { ultima ||= localStorage.getItem("ultima"); } catch {}
+  if (ultima && tutte.some(c => c.id === ultima)) apri(ultima);
   aggiorna();
   setInterval(aggiorna, 2000);
 })();

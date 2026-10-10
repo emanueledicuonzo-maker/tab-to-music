@@ -138,6 +138,13 @@ PAGINA = """<!doctype html>
   #luci { font-size: 13px; }
 
   #tracce { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 22px; }
+  /* Sugli schermi larghi il mixer sta fisso a destra, sempre a portata di mano. */
+  @media (min-width: 1000px) {
+    body { padding-right: 230px; }
+    #tracce { position: fixed; right: 20px; top: 20px; bottom: 20px; width: 190px; z-index: 6; margin: 0;
+              display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+    .striscia canvas { height: 78px; }
+  }
   .striscia { --c: var(--acceso); display: grid; grid-template-columns: 14px 1fr; gap: 6px 12px; padding: 12px;
               border-radius: 14px; background: var(--pannello); border: 1px solid var(--bordo); }
   .striscia.zitta { opacity: .45; }
