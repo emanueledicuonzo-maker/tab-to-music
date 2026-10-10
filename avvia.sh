@@ -34,6 +34,11 @@ strumento=$(zenity --list --radiolist --title="Tablatura" --text="Quale strument
 opzioni=()
 if zenity --question --title="Tablatura" --text="Trascrivo anche il testo cantato?" --ok-label="Sì" --cancel-label="No"; then
   opzioni+=(--testo)
+  # Se la lasci indovinare, Whisper sbaglia facile (Billie Jean in portoghese).
+  lingua=$(zenity --list --radiolist --title="Tablatura" --text="In che lingua si canta?" \
+    --column="" --column="Codice" --column="Lingua" --print-column=2 --hide-column=2 --height=300 \
+    TRUE en "Inglese" FALSE it "Italiano" FALSE es "Spagnolo" FALSE fr "Francese" FALSE "" "La indovina lui") || exit 0
+  [[ -n $lingua ]] && opzioni+=(--lingua "$lingua")
 fi
 [[ $strumento == chitarra* ]] && opzioni+=(--polifonico)
 
