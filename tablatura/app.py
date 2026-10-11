@@ -24,7 +24,7 @@ from dataclasses import asdict, dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import copertina, guitarpro
+from . import copertina, guitarpro, online
 from .strumenti import STRUMENTI
 from .visore import pagina
 
@@ -93,6 +93,11 @@ FASI = [
 ]
 RUMORE = re.compile(r"^\d{4}-\d\d-\d\d|^[EWI]\d{4}|tensorflow|cuda|cudnn|cublas|oneDNN|TF-TRT|AVX|WARNING|rebuild|absl|^\s*warn", re.I)
 
+# Le tablature da collegare a una canzone appena finisce di lavorarla:
+# percorso del file audio → (archivio, nome nello zip).
+da_collegare: dict[str, tuple[str, str]] = {}
+CARTELLE_DISCHI = [MUSICA, Path.home() / "Scaricati"]
+
 coda: list[Lavoro] = []
 serratura = threading.Lock()
 sveglia = threading.Event()
@@ -142,6 +147,12 @@ def lavora() -> None:
                 copertina.salva(Path(prossimo.canzone), TAB / prossimo.album)
             except OSError:
                 pass
+            if prossimo.canzone in da_collegare:
+                archivio, nome = da_collegare.pop(prossimo.canzone)
+                try:
+                    guitarpro.estrai(TAB / prossimo.album / prossimo.titolo, MUSICA, archivio, nome)
+                except Exception as errore:
+                    prossimo.registro.append(f"tablatura non collegata: {errore}")
         prossimo.stato = "fatta" if esito == 0 else "errore"
 
 
@@ -251,6 +262,8 @@ class Risponditore(BaseHTTPRequestHandler):
         percorso = urllib.parse.unquote(url.path)
         if percorso == "/":
             return self.manda(APP.encode(), "text/html; charset=utf-8")
+        if percorso == "/libreria/suona":
+            return self.manda(Path(__file__).with_name("suona.html").read_bytes(), "text/html; charset=utf-8")
         if percorso == "/api/canzoni":
             return self.json(canzoni_fatte())
         if percorso == "/api/sfoglia":
@@ -265,7 +278,7 @@ class Risponditore(BaseHTTPRequestHandler):
             relativo = "sw.js" if percorso == "/sw.js" else percorso[len("/pwa/"):]
             file = (PWA / relativo).resolve()
             if PWA.resolve() in file.parents and file.is_file():
-                tipo = {".js": "text/javascript", ".webmanifest": "application/manifest+json", ".png": "image/png",
+                tipo = {".js": "text/javascript", ".mjs": "text/javascript", ".webmanifest": "application/manifest+json", ".png": "image/png",
                         ".woff2": "font/woff2", ".woff": "font/woff", ".sf2": "application/octet-stream",
                         ".txt": "text/plain"}.get(file.suffix, "application/octet-stream")
                 altre = {"Service-Worker-Allowed": "/"} if file.name == "sw.js" else {"Cache-Control": "max-age=86400"}
@@ -277,6 +290,38 @@ class Risponditore(BaseHTTPRequestHandler):
             tab = json.loads((cartella / "leggio.json").read_text(encoding="utf-8"))
             vuole = "Basso" if "basso" in tab.get("strumento", "basso") else "Chitarra"
             return self.json(guitarpro.cerca(cartella.name, cartella.parent.name, MUSICA, vuole=vuole))
+        if percorso == "/api/libreria/artisti":
+            return self.json(guitarpro.artisti(MUSICA, domanda.get("q", "")))
+        if percorso == "/api/libreria/canzoni":
+            return self.json(guitarpro.canzoni_di(MUSICA, domanda.get("artista", "")))
+        if percorso == "/api/libreria/strumenti":
+            return self.json(guitarpro.strumenti(guitarpro.leggi(MUSICA, domanda["archivio"], domanda["nome"])))
+        if percorso == "/api/libreria/file":
+            dati = guitarpro.leggi(MUSICA, domanda["archivio"], domanda["nome"])
+            return self.manda(dati, "application/octet-stream")
+        if percorso == "/api/libreria/disco":
+            # Il disco di questa tablatura: già lavorato (in tab) o solo in Musica / Scaricati.
+            artista, titolo = domanda.get("artista", ""), domanda.get("titolo", "")
+            dischi = [d for c in CARTELLE_DISCHI if c.is_dir() for d in guitarpro.cerca_disco(c, artista, titolo)]
+            dischi.sort(key=lambda d: -d["punteggio"])
+            fatte = []
+            for d in dischi:
+                p = Path(d["percorso"])
+                cartella = TAB / p.parent.name / p.stem
+                if (cartella / "leggio.json").is_file():
+                    fatte.append({"id": f"{p.parent.name}/{p.stem}", "percorso": d["percorso"]})
+            return self.json({"fatte": fatte, "dischi": dischi})
+        if percorso == "/api/suoni":
+            tuoi = sorted(p for p in MUSICA.glob("*.sf[23]") if p.is_file())
+            if tuoi:
+                return self.json({"url": "/suoni/" + urllib.parse.quote(tuoi[0].name), "nome": tuoi[0].stem})
+            return self.json({"url": "/pwa/alphatab/soundfont/MuseScore_General.sf3", "nome": "MuseScore General"})
+        if percorso.startswith("/suoni/"):
+            file = MUSICA / Path(percorso).name
+            if file.suffix.lower() in (".sf2", ".sf3") and file.is_file():
+                return self.file_a_pezzi(file)
+        if percorso == "/api/testo":
+            return self.json(self.testo_online(domanda.get("id", "")))
         if percorso == "/api/sincronia":
             cartella = self.canzone(domanda.get("id", ""))
             return self.json(guitarpro.leggi_sincronia(cartella) if cartella else {})
@@ -317,6 +362,21 @@ class Risponditore(BaseHTTPRequestHandler):
                 return self.json({"errore": "canzone sconosciuta"}, 404)
             guitarpro.estrai(cartella, MUSICA, dati["archivio"], dati["nome"])
             return self.json({"ok": True})
+        if url.path == "/api/libreria/usa":
+            # Una tablatura dell'archivio sul disco vero: se la canzone è già
+            # lavorata la si collega subito, se no si lavora e la si collega dopo.
+            if dati.get("id"):
+                cartella = self.canzone(dati["id"])
+                if cartella is None:
+                    return self.json({"errore": "canzone sconosciuta"}, 404)
+                guitarpro.estrai(cartella, MUSICA, dati["archivio"], dati["nome"])
+                return self.json({"id": dati["id"]})
+            canzone = dati["percorso"]
+            da_collegare[canzone] = (dati["archivio"], dati["nome"])
+            preferenze = leggi_stato()
+            accoda([canzone], dati.get("strumento", "basso"), preferenze.get("testo", True), preferenze.get("lingua", "en"))
+            p = Path(canzone)
+            return self.json({"inLavorazione": f"{p.parent.name}/{p.stem}"})
         if url.path == "/api/sincronia":
             cartella = self.canzone(dati.get("id", ""))
             if cartella is None:
@@ -328,6 +388,43 @@ class Risponditore(BaseHTTPRequestHandler):
                 coda[:] = [l for l in coda if l.stato in ("in attesa", "in lavorazione")]
             return self.json({})
         self.manda(b"non c'e'", "text/plain", 404)
+
+    def testo_online(self, id_: str) -> dict:
+        """Il testo vero da LRCLIB, al posto di quello di Whisper (una volta sola)."""
+        cartella = self.canzone(id_)
+        if cartella is None:
+            return {"trovato": False}
+        file = cartella / "leggio.json"
+        tab = json.loads(file.read_text(encoding="utf-8"))
+        if tab.get("testoDa") in ("lrclib", "nessuno"):
+            return {"trovato": tab["testoDa"] == "lrclib", "gia": True}
+        import soundfile
+
+        traccia = next(iter(sorted(cartella.glob("*.wav"))), None)
+        durata = soundfile.info(str(traccia)).duration if traccia else 0
+        album, canzone = cartella.parent.name, cartella.name.replace("_", " ")
+        titoli = guitarpro._titoli_possibili(canzone)
+        # L'artista: dal nome della canzone («Rage Against The Machine - Killing…») o dall'album.
+        candidati_artista = [p for p in re.split(r"\s+-\s+", re.sub(r"^[\d\s._-]+", "", canzone)) if p not in titoli[-1:]]
+        candidati_artista += [re.split(r"\s+-\s+", re.sub(r"^[\d\s._-]+", "", album))[0]]
+        trovato = None
+        for artista in candidati_artista:
+            for titolo in reversed(titoli):
+                trovato = online.cerca_testo(artista, titolo, durata)
+                if trovato:
+                    break
+            if trovato:
+                break
+        if not trovato:
+            tab["testoDa"] = "nessuno"
+            file.write_text(json.dumps(tab), encoding="utf-8")
+            return {"trovato": False}
+        tab["paroleWhisper"] = tab.get("parole", [])
+        tab["parole"] = online.parole(trovato["syncedLyrics"], durata)
+        tab["testoDa"] = "lrclib"
+        tab["testoFonte"] = f"{trovato.get('artistName')} — {trovato.get('trackName')}"
+        file.write_text(json.dumps(tab), encoding="utf-8")
+        return {"trovato": True}
 
     def canzone(self, id_: str) -> Path | None:
         """La cartella di una canzone dal suo id «album/canzone», solo dentro tab."""

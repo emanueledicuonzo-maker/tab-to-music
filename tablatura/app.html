@@ -78,6 +78,17 @@
   .voce.aperta { color: var(--acceso); font-weight: 700; }
   .percorso { display: flex; gap: 6px; flex: 1; }
   .percorso input { flex: 1; min-width: 0; }
+  .libreria { display: grid; grid-template-columns: 260px 1fr; gap: 14px; min-height: 60vh; }
+  #artisti { overflow: auto; max-height: 66vh; border-right: 1px solid var(--bordo); padding-right: 8px; }
+  #canzoniArtista { overflow: auto; max-height: 66vh; }
+  .artista { display: flex; justify-content: space-between; width: 100%; text-align: left; border: 0; background: transparent; padding: 6px 10px; border-radius: 8px; }
+  .artista:hover { background: var(--morbido); }
+  .artista.scelto { background: #ffb0201a; color: var(--acceso); }
+  .artista small { color: var(--tenue); }
+  .canzoneGP { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 10px; }
+  .canzoneGP:hover { background: var(--morbido); }
+  .canzoneGP .titolo { flex: 1; font-weight: 600; }
+  .canzoneGP button { padding: 4px 10px; font-size: 13px; }
   .lavoro { display: grid; grid-template-columns: 120px 1fr; gap: 2px 12px; padding: 10px 0; border-bottom: 1px solid var(--bordo); }
   .lavoro .esito { font-size: 13px; font-weight: 700; }
   .lavoro .dett { grid-column: 2; font-size: 12px; color: var(--tenue); font-family: ui-monospace, monospace;
@@ -89,6 +100,7 @@
 <header>
   <span class="marchio"><i></i>Tablatura</span>
   <h1 id="titolo"></h1>
+  <button id="bLibreria" class="primario">Tablature</button>
   <button id="bApri">Apri</button>
   <button id="bImporta">Importa</button>
   <button id="bInstalla" class="primario" hidden title="Installa Tablatura come app">Installa l'app</button>
@@ -102,10 +114,18 @@
 <main>
   <iframe id="foglio" hidden></iframe>
   <div class="vuoto" id="vuoto">
-    <p>Che si suona?</p><small>Apri una canzone già fatta, o importane di nuove dalla tua musica.</small>
-    <div><button data-vai="apri">Apri una canzone</button><button data-vai="importa" class="primario">Importa</button></div>
+    <p>Che si suona?</p><small>Scegli una tablatura dall'archivio Guitar Pro: se il disco c'è, suona sul disco vero. Importa resta per tutto il resto.</small>
+    <div><button data-vai="libreria" class="primario">Tablature</button><button data-vai="apri">Apri una canzone</button><button data-vai="importa">Importa</button></div>
   </div>
 </main>
+
+<dialog id="dLibreria">
+  <div class="testa"><h2>Tablature</h2><input type="search" id="cercaArtista" placeholder="Cerca un artista…"><button class="chiudi" aria-label="Chiudi">×</button></div>
+  <div class="corpo libreria">
+    <div id="artisti"></div>
+    <div id="canzoniArtista"><p style="color:var(--tenue)">Scegli un artista.</p></div>
+  </div>
+</dialog>
 
 <dialog id="dApri">
   <div class="testa"><h2>Apri</h2><input type="search" id="cerca" placeholder="Cerca…"><button class="chiudi" aria-label="Chiudi">×</button></div>
@@ -217,6 +237,70 @@ $("bSchede").onclick = () => {
   for (const s of $("elenco").querySelectorAll("input:checked")) window.open(percorsoTab(s.dataset.id), "_blank");
   $("dApri").close();
 };
+
+// ---------------------------------------------------------------- Tablature
+let cercaTimer;
+async function mostraLibreria() {
+  $("dLibreria").showModal();
+  $("cercaArtista").focus();
+  if (!$("artisti").childNodes.length) disegnaArtisti("");
+}
+async function disegnaArtisti(filtro) {
+  const lista = await api("/api/libreria/artisti?q=" + encodeURIComponent(filtro));
+  const el = $("artisti");
+  el.textContent = "";
+  if (!lista.length) el.innerHTML = `<p style="color:var(--tenue)">Nessun artista.</p>`;
+  for (const a of lista) {
+    const b = document.createElement("button");
+    b.className = "artista";
+    b.innerHTML = `<span></span><small>${a.quante}</small>`;
+    b.querySelector("span").textContent = a.artista;
+    b.onclick = () => { el.querySelectorAll(".scelto").forEach(x => x.classList.remove("scelto")); b.classList.add("scelto"); disegnaCanzoni(a.artista); };
+    el.append(b);
+  }
+}
+async function disegnaCanzoni(artista) {
+  const el = $("canzoniArtista");
+  el.innerHTML = `<p style="color:var(--tenue)">Carico…</p>`;
+  const [canzoni, { preferenze }] = await Promise.all([
+    api("/api/libreria/canzoni?artista=" + encodeURIComponent(artista)), api("/api/stato")]);
+  const giuste = preferenze.gpGiuste || {};
+  el.textContent = "";
+  const testa = document.createElement("div"); testa.className = "album"; testa.textContent = artista; el.append(testa);
+  for (const c of canzoni) {
+    const r = document.createElement("div");
+    r.className = "canzoneGP";
+    r.innerHTML = `<span class="titolo"></span>`;
+    r.querySelector(".titolo").textContent = c.titolo;
+    // Se hai segnato la versione giusta, il titolo apre direttamente lei.
+    const giusta = giuste[`${artista}|${c.titolo}`];
+    if (giusta) {
+      r.querySelector(".titolo").textContent = "★ " + c.titolo;
+      r.querySelector(".titolo").style.cursor = "pointer";
+      r.querySelector(".titolo").title = "Apre la versione che hai segnato";
+      r.querySelector(".titolo").onclick = () => suonaGP(giusta.archivio, giusta.nome, `${artista} — ${c.titolo}`);
+    }
+    c.versioni.forEach((v, i) => {
+      const b = document.createElement("button");
+      b.textContent = c.versioni.length > 1 ? (v.etichetta.replace(c.titolo, "").trim() || `versione ${i + 1}`) : "Apri";
+      b.title = v.nome;
+      if (giusta && giusta.nome === v.nome) b.classList.add("primario");
+      b.onclick = () => suonaGP(v.archivio, v.nome, `${artista} — ${c.titolo}`);
+      r.append(b);
+    });
+    el.append(r);
+  }
+}
+function suonaGP(archivio, nome, titolo) {
+  aperta = null;
+  $("foglio").src = `/libreria/suona?archivio=${encodeURIComponent(archivio)}&nome=${encodeURIComponent(nome)}`;
+  $("foglio").hidden = false;
+  $("vuoto").hidden = true;
+  $("titolo").textContent = "— " + titolo;
+  $("dLibreria").close();
+}
+$("cercaArtista").oninput = e => { clearTimeout(cercaTimer); cercaTimer = setTimeout(() => disegnaArtisti(e.target.value), 200); };
+$("bLibreria").onclick = mostraLibreria;
 
 // ---------------------------------------------------------------- Importa
 let qui = null;
@@ -353,7 +437,7 @@ addEventListener("appinstalled", () => { $("bInstalla").hidden = true; });
 
 $("bApri").onclick = mostraApri;
 $("bImporta").onclick = mostraImporta;
-for (const b of document.querySelectorAll("[data-vai]")) b.onclick = b.dataset.vai === "apri" ? mostraApri : mostraImporta;
+for (const b of document.querySelectorAll("[data-vai]")) b.onclick = { apri: mostraApri, importa: mostraImporta, libreria: mostraLibreria }[b.dataset.vai];
 
 (async () => {
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});

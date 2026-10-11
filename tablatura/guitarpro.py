@@ -168,3 +168,84 @@ def leggi_sincronia(cartella: Path) -> dict:
 
 def salva_sincronia(cartella: Path, dati: dict) -> None:
     (cartella / SINCRONIA).write_text(json.dumps(dati), encoding="utf-8")
+
+
+# ---------------------------------------------------------------- la libreria
+
+
+def _artista_di(nome: str) -> str:
+    """L'artista come sta scritto nella cartella dell'archivio («Jackson, Michael»)."""
+    cartella = Path(nome).parent.name
+    return cartella or Path(nome).stem.partition(" - ")[0]
+
+
+@lru_cache(maxsize=2)
+def _per_artista(musica: Path) -> dict[str, list[tuple[str, str]]]:
+    """artista → [(archivio, nome nello zip)]"""
+    gruppi: dict[str, list[tuple[str, str]]] = {}
+    for archivio in archivi(musica):
+        for nome, _, _ in elenco(archivio):
+            gruppi.setdefault(_artista_di(nome), []).append((archivio.name, nome))
+    return gruppi
+
+
+def artisti(musica: Path, filtro: str = "", quanti: int = 400) -> list[dict]:
+    f = _semplice(filtro)
+    fuori = [
+        {"artista": a, "quante": len(v)}
+        for a, v in _per_artista(musica).items()
+        if not f or f in _semplice(a)
+    ]
+    fuori.sort(key=lambda x: x["artista"].lower())
+    return fuori[:quanti]
+
+
+def canzoni_di(musica: Path, artista: str) -> list[dict]:
+    """Le canzoni di un artista, ognuna con le sue versioni («(2)», «Live»…)."""
+    per_titolo: dict[str, dict] = {}
+    for archivio, nome in _per_artista(musica).get(artista, []):
+        base = Path(nome).stem.partition(" - ")[2] or Path(nome).stem
+        titolo = re.sub(r"\s*\(\d+\)\s*$", "", base).strip()
+        chiave = _semplice(titolo)
+        voce = per_titolo.setdefault(chiave, {"titolo": titolo, "versioni": []})
+        if all(Path(v["nome"]).name != Path(nome).name for v in voce["versioni"]):
+            voce["versioni"].append({"archivio": archivio, "nome": nome, "etichetta": base})
+    return sorted(per_titolo.values(), key=lambda v: v["titolo"].lower())
+
+
+def leggi(musica: Path, archivio: str, nome: str) -> bytes:
+    zip_ = next(a for a in archivi(musica) if a.name == archivio)
+    return _leggi(zip_, nome)
+
+
+AUDIO = {".mp3", ".flac", ".wav", ".ogg", ".m4a"}
+
+
+@lru_cache(maxsize=1)
+def _dischi(musica: Path, _giro: int) -> list[tuple[str, set[str], list[str]]]:
+    """(percorso, parole del percorso, titoli possibili) di ogni canzone in Musica."""
+    fuori = []
+    for f in musica.rglob("*"):
+        if f.suffix.lower() in AUDIO and "tab" not in f.relative_to(musica).parts[:1]:
+            parole = set(_semplice(" ".join(f.relative_to(musica).parts).replace("_", " ")).split())
+            fuori.append((str(f), parole, [_semplice(t) for t in _titoli_possibili(f.stem)]))
+    return fuori
+
+
+def cerca_disco(musica: Path, artista: str, titolo: str, quanti: int = 8) -> list[dict]:
+    """I file audio in Musica che sembrano questa canzone."""
+    import time
+
+    t = _semplice(titolo)
+    nomi_artista = set(_semplice(artista.replace(",", " ")).split())
+    fuori = []
+    for percorso, parole, titoli in _dischi(musica, int(time.time() // 300)):
+        somiglia = max((difflib.SequenceMatcher(None, t, x).ratio() for x in titoli if x), default=0)
+        if somiglia < 0.75:
+            continue
+        artista_ok = len(nomi_artista & parole) / max(1, len(nomi_artista))
+        if artista_ok < 0.5:
+            continue
+        fuori.append({"percorso": percorso, "punteggio": round(0.7 * somiglia + 0.3 * artista_ok, 3)})
+    fuori.sort(key=lambda r: -r["punteggio"])
+    return fuori[:quanti]

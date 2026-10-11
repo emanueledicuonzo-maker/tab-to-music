@@ -1,0 +1,2 @@
+MuseScore General: banco di suoni di MuseScore, licenza MIT.
+https://ftp.osuosl.org/pub/musescore/soundfont/MuseScore_General/

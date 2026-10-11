@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="it">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tablatura</title>
+<style>
+  :root { color-scheme: dark; --fondo: #06060b; --pannello: #ffffff08; --bordo: #ffffff14; --testo: #eef0f6; --tenue: #9aa0b4;
+          --acceso: #ffb020; --rosa: #ff3d81; --ciano: #2de2e6; --verde: #6bffa0; }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { background: radial-gradient(1200px 600px at 15% -10%, #ff3d811c, transparent 60%),
+                     radial-gradient(1000px 500px at 95% 0%, #2de2e61c, transparent 60%), var(--fondo); background-attachment: fixed; min-height: 100%; }
+  body { margin: 0; padding: 0 28px 80px; font: 15px/1.5 system-ui, "Ubuntu", sans-serif; color: var(--testo); }
+  button { font: inherit; padding: 8px 14px; border: 1px solid var(--bordo); border-radius: 10px; color: var(--testo);
+           background: var(--pannello); cursor: pointer; }
+  button:hover { border-color: #ffffff33; }
+  button.attivo { border-color: var(--acceso); color: var(--acceso); box-shadow: inset 0 0 12px #ffb02022; }
+  button.primario { background: linear-gradient(135deg, var(--acceso), var(--rosa)); border: 0; color: #111; font-weight: 700; }
+  .testata { padding: 26px 0 14px; }
+  .etichetta { font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: var(--tenue); }
+  .etichetta b { color: var(--ciano); }
+  h1 { font-size: clamp(22px, 2.6vw, 38px); margin: 6px 0 0; font-weight: 800;
+       background: linear-gradient(90deg, #fff, #ffd38a 55%, #ff9bc0); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  #giusta { margin-top: 10px; }
+  #giusta.attivo { border-color: var(--verde); color: var(--verde); box-shadow: inset 0 0 12px #6bffa022; }
+  #disco { margin: 14px 0 6px; padding: 12px 16px; border-radius: 14px; border: 1px solid var(--bordo); background: var(--pannello);
+           display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  #disco .nota { color: var(--tenue); }
+  #disco .ok { color: var(--verde); font-weight: 700; }
+  .trasporto { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 16px;
+               margin: 12px -16px; border-radius: 16px; background: #0b0b14cc; backdrop-filter: blur(14px); border: 1px solid var(--bordo); }
+  #via { width: 52px; height: 52px; border-radius: 50%; padding: 0; font-size: 20px; border: 0; color: #111;
+         background: linear-gradient(135deg, var(--acceso), var(--rosa)); box-shadow: 0 0 24px #ff3d8166; }
+  #tempo { font: 600 15px ui-monospace, monospace; color: var(--tenue); min-width: 110px; }
+  #stato { color: var(--tenue); font-size: 13px; margin-left: auto; }
+  #tracce { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .traccia { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border: 1px solid var(--bordo); border-radius: 12px; background: var(--pannello); }
+  .traccia.vista { border-color: var(--acceso); background: #ffb02014; }
+  .traccia .nome { cursor: pointer; display: flex; gap: 8px; align-items: center; }
+  .traccia small { display: block; color: var(--tenue); font-size: 11px; }
+  .traccia button { padding: 3px 9px; font-size: 12px; }
+  .traccia input { width: 70px; accent-color: var(--acceso); }
+  #alphaTab { background: #0b0b14; border: 1px solid var(--bordo); border-radius: 14px; padding: 10px; min-height: 300px; }
+  #alphaTab .at-cursor-bar { background: #ffb02022; }
+  #alphaTab .at-cursor-beat { background: var(--acceso); width: 3px; box-shadow: 0 0 12px var(--acceso); }
+  #alphaTab .at-highlight * { fill: var(--acceso); stroke: var(--acceso); }
+  #alphaTab .at-selection div { background: #2de2e633; }
+</style>
+
+<section class="testata">
+  <div class="etichetta">Tablatura Guitar Pro · <b id="fonte"></b></div>
+  <h1 id="titolo">…</h1>
+  <button id="giusta" title="Segna questa versione come quella giusta: la libreria aprirà sempre lei">✓ È questa</button>
+  <div id="disco"><span class="nota">Cerco il disco in Musica…</span></div>
+</section>
+
+<div class="trasporto">
+  <button id="via" title="Suona / ferma (spazio)" disabled>▶</button>
+  <button id="ferma" title="Torna all'inizio">⏮</button>
+  <span id="tempo">0:00 / 0:00</span>
+  <button data-v="0.5">0,5×</button><button data-v="0.75">0,75×</button><button data-v="1" class="attivo">1×</button>
+  <button id="ripeti" title="Ripete la parte selezionata (trascina sulla tablatura per selezionare)">Ripeti</button>
+  <button id="metronomo" title="Metronomo">Metronomo</button>
+  <span id="stato">Carico i suoni…</span>
+</div>
+
+<div id="tracce"></div>
+<div id="alphaTab"></div>
+
+<script type="module">
+// La versione a moduli: si porta dietro il worker e il worklet dell'audio,
+// che con quella classica non partivano (il lettore restava «non pronto»).
+import * as alphaTab from "/pwa/alphatab/alphaTab.min.mjs";
+const $ = id => document.getElementById(id);
+const q = new URLSearchParams(location.search);
+const ARCHIVIO = q.get("archivio"), NOME = q.get("nome");
+const parti = NOME.split("/").pop().replace(/\.[^.]+$/, "").split(" - ");
+const ARTISTA = parti[0], TITOLO = parti.slice(1).join(" - ") || parti[0];
+$("titolo").textContent = TITOLO;
+$("fonte").textContent = ARTISTA;
+document.title = `${TITOLO} — Tablatura`;
+
+const FAMIGLIE = ["Pianoforte", "Percussioni", "Organo", "Chitarra", "Basso", "Archi", "Archi", "Ottoni",
+                  "Fiati", "Flauti", "Synth", "Synth", "Effetti", "Etnici", "Percussioni", "Effetti"];
+const ICONE = { Pianoforte: "🎹", Organo: "🎹", Chitarra: "🎸", Basso: "🎸", Batteria: "🥁", Archi: "🎻", Ottoni: "🎺",
+                Fiati: "🎷", Flauti: "🪈", Synth: "🎛️", Voce: "🎤" };
+function strumentoDi(t) {
+  if (t.playbackInfo?.primaryChannel === 9 || t.staves[0]?.isPercussion) return "Batteria";
+  if (/voc|voz|voix|voice|vox|sing|canto|coro|choir/i.test(t.name || "")) return "Voce";
+  return FAMIGLIE[Math.floor((t.playbackInfo?.program ?? 0) / 8)] || "Strumento";
+}
+
+// Il banco di suoni: uno tuo messo in Musica (.sf2/.sf3), altrimenti MuseScore General.
+const SUONI = await fetch("/api/suoni").then(r => r.json()).catch(() => ({ url: "/pwa/alphatab/soundfont/MuseScore_General.sf3", nome: "MuseScore General" }));
+const at = new alphaTab.AlphaTabApi($("alphaTab"), {
+  core: { fontDirectory: "/pwa/alphatab/font/" },
+  display: { staveProfile: alphaTab.StaveProfile.Tab, resources: { mainGlyphColor: "#d9dcea", secondaryGlyphColor: "#9aa0b4",
+             staffLineColor: "#ffffff33", barSeparatorColor: "#ffffff44", scoreInfoColor: "#eef0f6" } },
+  player: { playerMode: alphaTab.PlayerMode.EnabledSynthesizer, enableCursor: true, enableAnimatedBeatCursor: true,
+            enableUserInteraction: true, scrollMode: alphaTab.ScrollMode.Continuous, scrollOffsetY: -160,
+            soundFont: SUONI.url },
+});
+window.at = at;   // comodo dalla console del browser
+let vista = 0;
+const orologio = ms => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
+
+fetch(`/api/libreria/file?archivio=${encodeURIComponent(ARCHIVIO)}&nome=${encodeURIComponent(NOME)}`)
+  .then(r => r.arrayBuffer()).then(b => at.load(new Uint8Array(b)));
+
+at.scoreLoaded.on(score => {
+  vista = Math.max(0, score.tracks.findIndex(t => strumentoDi(t) === "Basso"));
+  disegnaTracce(score);
+  at.renderTracks([score.tracks[vista]]);
+});
+at.soundFontLoad.on(e => {
+  const p = Math.round(e.loaded / e.total * 100);
+  $("stato").textContent = p < 100 ? `Carico i suoni… ${p}%` : "Suoni pronti: premi ▶.";
+  // Il clic su ▶ accende l'audio del browser: da lì il lettore è pronto davvero.
+  if (p >= 100) $("via").disabled = false;
+});
+at.playerReady.on(() => { $("via").disabled = false; $("stato").textContent = `Suoni di ${SUONI.nome}. Trascina sulla tablatura per scegliere un pezzo da ripetere.`; });
+at.playerStateChanged.on(e => { $("via").textContent = e.state === 1 ? "⏸" : "▶"; });
+at.playerPositionChanged.on(e => { $("tempo").textContent = `${orologio(e.currentTime)} / ${orologio(e.endTime)}`; });
+
+function disegnaTracce(score) {
+  const el = $("tracce");
+  el.textContent = "";
+  score.tracks.forEach((t, i) => {
+    const tipo = strumentoDi(t);
+    const r = document.createElement("div");
+    r.className = "traccia" + (i === vista ? " vista" : "");
+    r.innerHTML = `<span class="nome" title="Mostra questa traccia"><span>${ICONE[tipo] || "🎵"}</span><span><b></b><small></small></span></span>
+      <button class="muta">muta</button><button class="solo">solo</button><input type="range" min="0" max="16" value="${t.playbackInfo.volume}">`;
+    r.querySelector("b").textContent = t.name?.trim() || tipo;
+    r.querySelector("small").textContent = t.name?.trim() ? tipo : `traccia ${i + 1}`;
+    r.querySelector(".nome").onclick = () => { vista = i; at.renderTracks([t]); disegnaTracce(score); };
+    const muta = r.querySelector(".muta"), solo = r.querySelector(".solo");
+    muta.onclick = () => { const s = !muta.classList.contains("attivo"); muta.classList.toggle("attivo", s); at.changeTrackMute([t], s); };
+    solo.onclick = () => { const s = !solo.classList.contains("attivo"); solo.classList.toggle("attivo", s); at.changeTrackSolo([t], s); };
+    r.querySelector("input").oninput = e => at.changeTrackVolume([t], e.target.value / t.playbackInfo.volume || 0);
+    el.append(r);
+  });
+}
+
+$("via").onclick = () => at.playPause();
+$("ferma").onclick = () => at.stop();
+for (const b of document.querySelectorAll("[data-v]")) b.onclick = () => {
+  at.playbackSpeed = Number(b.dataset.v);
+  document.querySelectorAll("[data-v]").forEach(x => x.classList.toggle("attivo", x === b));
+};
+$("ripeti").onclick = () => { at.isLooping = !at.isLooping; $("ripeti").classList.toggle("attivo", at.isLooping); };
+$("metronomo").onclick = () => { at.metronomeVolume = at.metronomeVolume ? 0 : 1; $("metronomo").classList.toggle("attivo", !!at.metronomeVolume); };
+addEventListener("keydown", e => { if (e.code === "Space" && !/INPUT|BUTTON/.test(document.activeElement.tagName)) { e.preventDefault(); at.playPause(); } });
+
+// «È questa»: per questa canzone la libreria aprirà sempre questa versione.
+const CHIAVE = `${ARTISTA}|${TITOLO.replace(/\s*\(\d+\)\s*$/, "")}`;
+fetch("/api/stato").then(r => r.json()).then(({ preferenze }) => {
+  const p = (preferenze.gpGiuste || {})[CHIAVE];
+  $("giusta").classList.toggle("attivo", !!p && p.nome === NOME);
+}).catch(() => {});
+$("giusta").onclick = async () => {
+  const { preferenze } = await fetch("/api/stato").then(r => r.json());
+  const giuste = preferenze.gpGiuste || {};
+  const gia = giuste[CHIAVE]?.nome === NOME;
+  if (gia) delete giuste[CHIAVE]; else giuste[CHIAVE] = { archivio: ARCHIVIO, nome: NOME };
+  await fetch("/api/preferenze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ gpGiuste: giuste }) });
+  $("giusta").classList.toggle("attivo", !gia);
+  $("giusta").textContent = gia ? "✓ È questa" : "✓ È questa (segnata)";
+};
+
+// Il disco vero: se c'è, la tablatura va sulle tracce separate del disco.
+async function usa(corpo) {
+  const r = await fetch("/api/libreria/usa", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ archivio: ARCHIVIO, nome: NOME, ...corpo }) }).then(r => r.json());
+  try { localStorage.setItem("vista", "gp"); } catch {}
+  if (r.id) { at.stop(); (window.parent.apri || (id => location.href = "/"))(r.id); return; }
+  if (r.inLavorazione) aspetta(r.inLavorazione);
+}
+function aspetta(id) {
+  $("disco").innerHTML = `<span class="nota">Sto separando le tracce del disco e sincronizzando (3-4 minuti). Intanto suona con gli strumenti di Guitar Pro.</span>`;
+  const giro = setInterval(async () => {
+    const { coda } = await fetch("/api/stato").then(r => r.json());
+    const l = coda.find(l => `${l.album}/${l.titolo}` === id);
+    if (l && l.stato === "fatta") {
+      clearInterval(giro);
+      $("disco").innerHTML = `<span class="ok">✓ Pronta col disco vero.</span>`;
+      const b = document.createElement("button"); b.className = "primario"; b.textContent = "Apri col disco";
+      b.onclick = () => { at.stop(); window.parent.apri ? window.parent.apri(id) : (location.href = "/"); };
+      $("disco").append(b);
+    } else if (l && l.stato === "errore") { clearInterval(giro); $("disco").innerHTML = `<span class="nota">Il disco non si è lasciato lavorare: resta con gli strumenti di Guitar Pro.</span>`; }
+  }, 3000);
+}
+(async () => {
+  const r = await fetch(`/api/libreria/disco?artista=${encodeURIComponent(ARTISTA)}&titolo=${encodeURIComponent(TITOLO)}`).then(r => r.json()).catch(() => ({ fatte: [], dischi: [] }));
+  const el = $("disco");
+  el.textContent = "";
+  if (r.fatte.length) {
+    el.innerHTML = `<span class="ok">✓ Il disco c'è, già con le tracce separate.</span>`;
+    const b = document.createElement("button"); b.className = "primario"; b.textContent = "Suona sul disco vero";
+    b.onclick = () => usa({ id: r.fatte[0].id });
+    el.append(b);
+  } else if (r.dischi.length) {
+    el.innerHTML = `<span class="nota">Il disco c'è in Musica, ma le tracce non sono ancora separate:</span>`;
+    for (const d of r.dischi.slice(0, 3)) {
+      const b = document.createElement("button"); b.textContent = "Usa " + d.percorso.split("/").slice(-2).join(" / ");
+      b.onclick = () => usa({ percorso: d.percorso });
+      el.append(b);
+    }
+  } else {
+    el.innerHTML = `<span class="nota">Il disco non c'è in Musica: suona con gli strumenti di Guitar Pro.</span>`;
+  }
+})();
+</script>
+</html>

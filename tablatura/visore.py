@@ -1245,6 +1245,11 @@ document.getElementById("gpFile").onchange = async e => {
 document.getElementById("bGP").onclick = scegliGP;
 document.querySelector("#dGP .chiudi").onclick = () => document.getElementById("dGP").close();
 if (VISTA_RICORDATA === "gp" && GP.file) scegliVista("gp");
+
+// Il testo vero da LRCLIB, al posto di quello di Whisper: si chiede una volta sola.
+if (!DATI.testoDa && GP.id) {
+  fetch("/api/testo?id=" + encodeURIComponent(GP.id)).then(r => r.json()).then(r => { if (r.trovato && !r.gia) location.reload(); }).catch(() => {});
+}
 </script>
 </html>
 """
