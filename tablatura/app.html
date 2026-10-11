@@ -2,7 +2,7 @@
 <html lang="it">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tablatura</title>
+<title>Tab to Music</title>
 <link rel="manifest" href="/pwa/manifest.webmanifest">
 <link rel="icon" href="/pwa/icona-192.png">
 <meta name="theme-color" content="#0b0b14">
@@ -16,6 +16,8 @@
   header { display: flex; align-items: center; gap: 10px; padding: 10px 18px; border-bottom: 1px solid var(--bordo);
            background: linear-gradient(90deg, #ffb02010, #ff3d810c 40%, #2de2e608); }
   .marchio { display: flex; align-items: center; gap: 10px; margin-right: 10px; font-weight: 800; letter-spacing: .02em; }
+  .firma { font-size: 11px; font-weight: 500; color: var(--tenue); text-decoration: none; margin-left: 4px; }
+  .firma:hover { color: var(--acceso); }
   .marchio i { width: 28px; height: 28px; border-radius: 9px; background: conic-gradient(from 200deg, var(--acceso), var(--rosa), var(--ciano), var(--acceso));
                box-shadow: 0 0 18px #ff3d8166; }
   header h1 { font-size: 14px; margin: 0 8px 0 0; font-weight: 500; color: var(--tenue); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -141,13 +143,13 @@
 </style>
 
 <header>
-  <span class="marchio"><i></i>Tablatura</span>
+  <span class="marchio"><i></i>Tab to Music <a class="firma" href="https://getaweb.it" target="_blank" rel="noopener">by getaweb.it</a></span>
   <h1 id="titolo"></h1>
-  <button id="bLaMusica" class="primario">Libreria</button>
-  <button id="bLibreria">Tablature</button>
-  <button id="bImporta">Importa</button>
-  <button id="bInstalla" class="primario" hidden title="Installa Tablatura come app">Installa l'app</button>
-  <span id="stato" title="Mostra la coda"></span>
+  <button id="bLaMusica" class="primario">Library</button>
+  <button id="bLibreria">Tabs</button>
+  <button id="bImporta">Import</button>
+  <button id="bInstalla" class="primario" hidden title="Install Tab to Music as an app">Install app</button>
+  <span id="stato" title="Show the queue"></span>
 </header>
 <div id="avanzamento" hidden>
   <div class="riga1"><span id="avCanzone"></span><span id="avConto"></span></div>
@@ -157,67 +159,67 @@
 <main>
   <iframe id="foglio" hidden></iframe>
   <div class="vuoto" id="vuoto">
-    <p>Che si suona?</p><small>Libreria: scegli una canzone della tua musica, e la tablatura Guitar Pro si sincronizza da sola sul disco. Importa è l'ultima spiaggia, quando la tablatura non c'è.</small>
-    <div><button data-vai="musica" class="primario">Libreria</button><button data-vai="libreria">Tablature</button><button data-vai="importa">Importa</button></div>
+    <p>What are we playing?</p><small>Library: pick a song from your music and its Guitar Pro tab syncs to the real recording by itself. Import is the last resort, when no tab exists.</small>
+    <div><button data-vai="musica" class="primario">Library</button><button data-vai="libreria">Tabs</button><button data-vai="importa">Import</button></div>
   </div>
 </main>
 
 <dialog id="dMusica">
   <div class="lib">
     <aside class="libLato">
-      <div class="libCerca"><input type="search" id="cercaMusica" placeholder="Artista, canzone o album…"></div>
+      <div class="libCerca"><input type="search" id="cercaMusica" placeholder="Artist, song or album…"></div>
       <div id="artistiMusica"></div>
     </aside>
     <section class="libCorpo" id="canzoniMusica"></section>
-    <button class="chiudi libChiudi" aria-label="Chiudi">×</button>
+    <button class="chiudi libChiudi" aria-label="Close">×</button>
   </div>
 </dialog>
 
 <dialog id="dLibreria">
-  <div class="testa"><h2>Tablature</h2><input type="search" id="cercaArtista" placeholder="Cerca un artista…"><button class="chiudi" aria-label="Chiudi">×</button></div>
+  <div class="testa"><h2>Tabs</h2><input type="search" id="cercaArtista" placeholder="Search an artist…"><button class="chiudi" aria-label="Close">×</button></div>
   <div class="corpo libreria">
     <div id="artisti"></div>
-    <div id="canzoniArtista"><p style="color:var(--tenue)">Scegli un artista.</p></div>
+    <div id="canzoniArtista"><p style="color:var(--tenue)">Pick an artist.</p></div>
   </div>
 </dialog>
 
 <dialog id="dApri">
-  <div class="testa"><h2>Apri</h2><input type="search" id="cerca" placeholder="Cerca…"><button class="chiudi" aria-label="Chiudi">×</button></div>
+  <div class="testa"><h2>Open</h2><input type="search" id="cerca" placeholder="Search…"><button class="chiudi" aria-label="Close">×</button></div>
   <div class="corpo" id="elenco"></div>
   <div class="piede">
-    <span id="selApri" style="opacity:.7;font-size:13px">Clic su una canzone per aprirla qui. Spunta più canzoni per aprirle in schede.</span>
-    <button class="spinta" id="bSchede" disabled>Apri le spuntate in schede</button>
+    <span id="selApri" style="opacity:.7;font-size:13px">Click a song to open it here. Tick several to open them in tabs.</span>
+    <button class="spinta" id="bSchede" disabled>Open ticked in tabs</button>
   </div>
 </dialog>
 
 <dialog id="dImporta">
   <div class="testa">
-    <h2>Importa</h2>
+    <h2>Import</h2>
     <div class="percorso">
-      <button id="bSu" title="Cartella sopra">↑</button>
-      <button id="bMusica" title="Torna a Musica">Musica</button>
-      <input type="text" id="dove" spellcheck="false" title="Scrivi una cartella e premi Invio">
+      <button id="bSu" title="Parent folder">↑</button>
+      <button id="bMusica" title="Back to Music">Music</button>
+      <input type="text" id="dove" spellcheck="false" title="Type a folder and press Enter">
     </div>
-    <button class="chiudi" aria-label="Chiudi">×</button>
+    <button class="chiudi" aria-label="Close">×</button>
   </div>
   <div class="corpo" id="sfoglia"></div>
   <div class="piede">
-    <label class="opz">Strumento
-      <select id="strumento"><option value="basso">basso</option><option value="basso-dropd">basso drop D</option><option value="basso5">basso 5 corde</option>
-        <option value="chitarra">chitarra</option><option value="chitarra-dropd">chitarra drop D</option></select></label>
-    <label class="opz"><input type="checkbox" id="testo"> testo</label>
-    <label class="opz">lingua
-      <select id="lingua"><option value="en">inglese</option><option value="it">italiano</option><option value="es">spagnolo</option>
-        <option value="fr">francese</option><option value="">la indovina</option></select></label>
-    <button id="bTutto">Spunta tutto</button>
-    <button class="spinta primario" id="bVia" disabled>Importa</button>
+    <label class="opz">Instrument
+      <select id="strumento"><option value="basso">bass</option><option value="basso-dropd">bass drop D</option><option value="basso5">5-string bass</option>
+        <option value="chitarra">guitar</option><option value="chitarra-dropd">guitar drop D</option></select></label>
+    <label class="opz"><input type="checkbox" id="testo"> lyrics</label>
+    <label class="opz">language
+      <select id="lingua"><option value="en">English</option><option value="it">Italian</option><option value="es">Spanish</option>
+        <option value="fr">French</option><option value="">auto-detect</option></select></label>
+    <button id="bTutto">Tick all</button>
+    <button class="spinta primario" id="bVia" disabled>Import</button>
   </div>
 </dialog>
 
 <dialog id="dCoda">
-  <div class="testa"><h2>Canzoni in lavorazione</h2><button class="chiudi" aria-label="Chiudi">×</button></div>
+  <div class="testa"><h2>Songs in progress</h2><button class="chiudi" aria-label="Close">×</button></div>
   <div class="corpo" id="lavori"></div>
-  <div class="piede"><button class="spinta" id="bSvuota">Togli quelle finite</button></div>
+  <div class="piede"><button class="spinta" id="bSvuota">Clear finished</button></div>
 </dialog>
 
 <script>
@@ -241,7 +243,7 @@ function apri(id) {
   $("foglio").hidden = false;
   $("vuoto").hidden = true;
   $("titolo").textContent = "— " + id.split("/")[1];
-  document.title = id.split("/")[1] + " — Tablatura";
+  document.title = id.split("/")[1] + " — Tab to Music";
   api("/api/preferenze", { ultima: id });
 }
 
@@ -259,7 +261,7 @@ function disegnaElenco() {
   el.textContent = "";
   let album = null;
   const visibili = canzoni.filter(c => (c.album + " " + c.canzone).toLowerCase().includes(filtro));
-  if (!visibili.length) el.innerHTML = `<p style="opacity:.6">${canzoni.length ? "Nessuna canzone trovata." : "Non c'è ancora nessuna canzone lavorata: usa Importa."}</p>`;
+  if (!visibili.length) el.innerHTML = `<p style="opacity:.6">${canzoni.length ? "No songs found." : "No processed songs yet: use Import."}</p>`;
   for (const c of visibili) {
     if (c.album !== album) {
       album = c.album;
@@ -284,7 +286,7 @@ function disegnaElenco() {
 function contaSpuntate() {
   const n = $("elenco").querySelectorAll("input:checked").length;
   $("bSchede").disabled = !n;
-  $("bSchede").textContent = n ? `Apri le ${n} spuntate in schede` : "Apri le spuntate in schede";
+  $("bSchede").textContent = n ? `Open ${n} ticked in tabs` : "Open ticked in tabs";
 }
 $("cerca").oninput = disegnaElenco;
 $("bSchede").onclick = () => {
@@ -304,7 +306,7 @@ async function mostraMusica() {
   if (!artistiTutti.length) {
     artistiTutti = await api("/api/musica/artisti");
     disegnaArtistiMusica("");
-    $("canzoniMusica").innerHTML = `<div class="libVuoto"><b>La tua musica</b><span>${artistiTutti.reduce((n, a) => n + a.quante, 0)} canzoni di ${artistiTutti.length} artisti.</span><span>Scegli un artista, o cerca una canzone.</span></div>`;
+    $("canzoniMusica").innerHTML = `<div class="libVuoto"><b>Your music</b><span>${artistiTutti.reduce((n, a) => n + a.quante, 0)} songs by ${artistiTutti.length} artists.</span><span>Pick an artist, or search for a song.</span></div>`;
   }
 }
 function disegnaArtistiMusica(filtro) {
@@ -327,14 +329,14 @@ function riga(c, conArtista) {
   r.querySelector(".tit small").textContent = conArtista ? `${c.artista} · ${c.album}` : "";
   r.querySelector(".dur").textContent = durata(c.durata);
   const tag = r.querySelector(".tag");
-  tag.innerHTML = (c.tab ? `<span class="eti tab" title="C'è la tablatura Guitar Pro: si sincronizza da sola">TAB</span>` : `<span class="eti no" title="Tablatura non trovata negli archivi: puoi caricarla tu o usare Importa">senza tab</span>`)
-    + (c.fatta ? `<span class="eti tracce" title="Le tracce del disco sono già separate: c'è il mixer">TRACCE ✓</span>` : "");
+  tag.innerHTML = (c.tab ? `<span class="eti tab" title="A Guitar Pro tab exists: it syncs by itself">TAB</span>` : `<span class="eti no" title="No tab in the archives: upload your own or use Import">no tab</span>`)
+    + (c.fatta ? `<span class="eti tracce" title="The recording is already split into stems: the mixer is ready">STEMS ✓</span>` : "");
   r.onclick = () => apriDisco(c.percorso, `${c.artista} — ${c.titolo}`);
   return r;
 }
 async function disegnaCanzoniMusica(a) {
   const el = $("canzoniMusica");
-  el.innerHTML = `<div class="libVuoto"><span>Carico…</span></div>`;
+  el.innerHTML = `<div class="libVuoto"><span>Loading…</span></div>`;
   const canzoni = await api("/api/musica/canzoni?chiave=" + encodeURIComponent(a.chiave));
   const album = [];
   for (const c of canzoni) {
@@ -347,8 +349,8 @@ async function disegnaCanzoniMusica(a) {
   el.textContent = "";
   const testa = document.createElement("div");
   testa.className = "libTesta";
-  testa.innerHTML = `<div class="sfondo"></div><div class="tipo">Artista</div><h2></h2>
-    <div class="numeri"><span><b>${canzoni.length}</b> canzoni</span><span><b>${album.length}</b> album</span><span><b>${durataLunga(totale)}</b></span><span><b>${conTab}</b> con la tablatura</span></div>`;
+  testa.innerHTML = `<div class="sfondo"></div><div class="tipo">Artist</div><h2></h2>
+    <div class="numeri"><span><b>${canzoni.length}</b> songs</span><span><b>${album.length}</b> albums</span><span><b>${durataLunga(totale)}</b></span><span><b>${conTab}</b> with a tab</span></div>`;
   testa.querySelector("h2").textContent = a.artista;
   testa.querySelector(".sfondo").style.backgroundImage = `url('${copertinaDi(canzoni[0].percorso)}')`;
   el.append(testa);
@@ -357,7 +359,7 @@ async function disegnaCanzoniMusica(a) {
     blocco.className = "disco";
     blocco.innerHTML = `<div><img class="cop" alt=""></div><div><div class="tipo" style="font-size:12px;letter-spacing:.18em;color:var(--tenue);text-transform:uppercase">Album</div><h3></h3><div class="sotto"></div><table class="brani"></table></div>`;
     blocco.querySelector("h3").textContent = g.nome;
-    blocco.querySelector(".sotto").textContent = [g.anno, `${g.brani.length} ${g.brani.length === 1 ? "canzone" : "canzoni"}`,
+    blocco.querySelector(".sotto").textContent = [g.anno, `${g.brani.length} ${g.brani.length === 1 ? "song" : "songs"}`,
       durataLunga(g.brani.reduce((n, c) => n + (c.durata || 0), 0))].filter(Boolean).join(" · ");
     const img = blocco.querySelector(".cop");
     img.src = copertinaDi(g.brani[0].percorso);
@@ -374,7 +376,7 @@ async function cercaCanzoni(q) {
   el.textContent = "";
   const testa = document.createElement("div");
   testa.className = "libTesta";
-  testa.innerHTML = `<div class="tipo">Ricerca</div><h2></h2><div class="numeri"><span><b>${trovate.length}</b> canzoni trovate</span></div>`;
+  testa.innerHTML = `<div class="tipo">Search</div><h2></h2><div class="numeri"><span><b>${trovate.length}</b> songs found</span></div>`;
   testa.querySelector("h2").textContent = `«${q}»`;
   el.append(testa);
   const blocco = document.createElement("div");
@@ -412,7 +414,7 @@ async function disegnaArtisti(filtro) {
   const lista = await api("/api/libreria/artisti?q=" + encodeURIComponent(filtro));
   const el = $("artisti");
   el.textContent = "";
-  if (!lista.length) el.innerHTML = `<p style="color:var(--tenue)">Nessun artista.</p>`;
+  if (!lista.length) el.innerHTML = `<p style="color:var(--tenue)">No artists.</p>`;
   for (const a of lista) {
     const b = document.createElement("button");
     b.className = "artista";
@@ -424,7 +426,7 @@ async function disegnaArtisti(filtro) {
 }
 async function disegnaCanzoni(artista) {
   const el = $("canzoniArtista");
-  el.innerHTML = `<p style="color:var(--tenue)">Carico…</p>`;
+  el.innerHTML = `<p style="color:var(--tenue)">Loading…</p>`;
   const [canzoni, { preferenze }] = await Promise.all([
     api("/api/libreria/canzoni?artista=" + encodeURIComponent(artista)), api("/api/stato")]);
   const giuste = preferenze.gpGiuste || {};
@@ -440,12 +442,12 @@ async function disegnaCanzoni(artista) {
     if (giusta) {
       r.querySelector(".titolo").textContent = "★ " + c.titolo;
       r.querySelector(".titolo").style.cursor = "pointer";
-      r.querySelector(".titolo").title = "Apre la versione che hai segnato";
+      r.querySelector(".titolo").title = "Opens the version you marked";
       r.querySelector(".titolo").onclick = () => suonaGP(giusta.archivio, giusta.nome, `${artista} — ${c.titolo}`);
     }
     c.versioni.forEach((v, i) => {
       const b = document.createElement("button");
-      b.textContent = c.versioni.length > 1 ? (v.etichetta.replace(c.titolo, "").trim() || `versione ${i + 1}`) : "Apri";
+      b.textContent = c.versioni.length > 1 ? (v.etichetta.replace(c.titolo, "").trim() || `version ${i + 1}`) : "Open";
       b.title = v.nome;
       if (giusta && giusta.nome === v.nome) b.classList.add("primario");
       b.onclick = () => suonaGP(v.archivio, v.nome, `${artista} — ${c.titolo}`);
@@ -472,7 +474,7 @@ async function vaiA(dove) {
   $("dove").value = qui.dove;
   const el = $("sfoglia");
   el.textContent = "";
-  if (!qui.cartelle.length && !qui.canzoni.length) el.innerHTML = `<p style="opacity:.6">Cartella vuota.</p>`;
+  if (!qui.cartelle.length && !qui.canzoni.length) el.innerHTML = `<p style="opacity:.6">Empty folder.</p>`;
   const riga = (nome, cartella) => {
     const r = document.createElement("label");
     r.className = "voce";
@@ -494,7 +496,7 @@ async function vaiA(dove) {
 function contaDaImportare() {
   const s = [...$("sfoglia").querySelectorAll("input:checked")];
   $("bVia").disabled = !s.length;
-  $("bVia").textContent = s.length ? `Importa (${s.length})` : "Importa";
+  $("bVia").textContent = s.length ? `Import (${s.length})` : "Import";
 }
 async function mostraImporta() {
   const { preferenze: p } = await api("/api/stato");
@@ -520,7 +522,7 @@ $("bVia").onclick = async () => {
     percorsi, strumento: $("strumento").value, testo: $("testo").checked, lingua: $("lingua").value,
   });
   $("dImporta").close();
-  if (!accodate) alertino("Lì dentro non ho trovato canzoni.");
+  if (!accodate) alertino("No songs found in there.");
   aggiorna();
 };
 function alertino(testo) { $("stato").textContent = testo; }
@@ -532,7 +534,7 @@ async function aggiorna() {
   try { dati = await api("/api/stato"); } catch { dati = { spento: true, coda: [], fasi: [] }; }
   if (dati.spento) {
     $("stato").classList.remove("attivo");
-    $("stato").textContent = "Programma spento: si riguardano le canzoni salvate, per importare riapri l'icona.";
+    $("stato").textContent = "App stopped: saved songs still open; to import, reopen the icon.";
     $("avanzamento").hidden = true;
     $("bImporta").disabled = true;
     return;
@@ -548,8 +550,8 @@ async function aggiorna() {
   $("avanzamento").hidden = !corso;
   if (corso) {
     const n = coda.indexOf(corso);
-    $("avCanzone").textContent = "Sto lavorando: " + corso.titolo;
-    $("avConto").textContent = `${n + 1} di ${coda.length}` + (attesa ? ` · ${attesa} in attesa` : "");
+    $("avCanzone").textContent = "Working on: " + corso.titolo;
+    $("avConto").textContent = `${n + 1} of ${coda.length}` + (attesa ? ` · ${attesa} waiting` : "");
     $("avFasi").textContent = "";
     dati.fasi.forEach((nome, i) => {
       const s = document.createElement("span");
@@ -562,9 +564,9 @@ async function aggiorna() {
   }
   if (corso) {
     const n = coda.indexOf(corso) + 1;
-    $("stato").textContent = `${n} di ${coda.length}: ${corso.titolo} — ${corso.dettaglio || "comincio…"}`;
+    $("stato").textContent = `${n} of ${coda.length}: ${corso.titolo} — ${corso.dettaglio || "starting…"}`;
   } else if (coda.length) {
-    $("stato").textContent = `Fatte ${fatte.length} di ${coda.length}` + (errori ? ` · ${errori} con errore` : "");
+    $("stato").textContent = `Done ${fatte.length} of ${coda.length}` + (errori ? ` · ${errori} failed` : "");
   } else $("stato").textContent = "";
   // Se non c'è niente aperto, la prima canzone pronta si apre da sola.
   for (const l of fatte) {
@@ -575,13 +577,13 @@ async function aggiorna() {
 function disegnaCoda(coda) {
   const el = $("lavori");
   el.textContent = "";
-  if (!coda.length) el.innerHTML = `<p style="opacity:.6">Niente in coda.</p>`;
+  if (!coda.length) el.innerHTML = `<p style="opacity:.6">Queue is empty.</p>`;
   for (const l of coda) {
     const r = document.createElement("div");
     r.className = "lavoro";
     const classe = { "fatta": "fatta", "errore": "errore", "in lavorazione": "lavorazione" }[l.stato] || "";
     r.innerHTML = `<span class="esito ${classe}"></span><span class="nome"></span><span class="dett"></span>`;
-    r.querySelector(".esito").textContent = l.stato;
+    r.querySelector(".esito").textContent = { "fatta": "done", "errore": "error", "in lavorazione": "working", "in attesa": "waiting" }[l.stato] || l.stato;
     r.querySelector(".nome").textContent = `${l.album} — ${l.titolo}`;
     r.querySelector(".dett").textContent = l.stato === "errore" ? l.registro.slice(-8).join("\n") : l.dettaglio;
     if (l.stato === "fatta") { r.style.cursor = "pointer"; r.onclick = () => { apri(l.id); $("dCoda").close(); }; }

@@ -5,4 +5,4 @@ soundfile>=0.12
 faster-whisper>=1.0
 setuptools<81  # basic-pitch → resampy usa ancora pkg_resources
 pyguitarpro>=0.9  # legge gli strumenti dei file Guitar Pro 3-5
-mutagen>=1.47  # artista e titolo dai tag dei file audio, per la Libreria
+tinytag>=2.0  # artista, titolo, album e copertina dai tag dei file, per la Libreria (MIT)

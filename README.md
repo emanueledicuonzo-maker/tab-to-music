@@ -1,124 +1,76 @@
-# tablatura
+# Tab to Music
 
-Prendi una canzone, spegni gli strumenti che non ti interessano, e leggi la
-tablatura di quello che ti interessa. Tutto sul tuo computer: nessun account,
-nessun caricamento, nessun tasto per esportare o condividere.
+**Your Guitar Pro tabs, synced to the real recording — with the instruments you can turn off.**
 
-```
-canzone.flac
-   └─ Demucs ────────► voce · basso · batteria · resto
-                          └─ Basic Pitch ──► note
-                                └─ pulizia ──► note vere
-                                     └─ diteggiatura ──► corda e tasto
-                                          └─ tablatura + pagina da leggere
-```
+Pick a song from your own music library: Tab to Music finds a matching Guitar Pro tab in your tab archives, syncs it bar by bar to the actual recording in a few seconds, and lets you play along with a cursor that follows the record. Split the recording into stems (bass, drums, vocals, other) and mute or solo the part you want to practice. No synthesized instruments, no cloud, no subscription: everything runs on your computer.
 
-## Come si usa
+*Conceived and developed by [Getaweb](https://getaweb.it).* · [Italiano ↓](#italiano)
 
-```bash
-pip install -r requirements.txt
-python -m tablatura canzone.flac                      # basso, che è quello che viene meglio
-python -m tablatura canzone.flac --strumento chitarra # serve il modello a sei tracce
-python -m tablatura canzone.flac --bpm 128            # se il tempo lo sai già, diglielo
-```
+![Library](docs/library.png)
 
-Escono due cose, nella cartella `canzone-tablatura/`:
+## What it does
 
-- un file di testo con la tablatura, da stampare o da tenere aperto;
-- una pagina `tablatura.html` da aprire nel browser: le tracce separate con
-  una manopola a testa, e la tablatura che scorre mentre suona. Spegnendo il
-  basso senti il pezzo senza basso — audio vero, non un sintetizzatore.
-
-### Se il basso ripete sempre lo stesso giro
-
-Un ostinato di sei note su un pezzo di sette minuti riempirebbe duecento
-battute identiche, che non si leggono. Quando trova un giro che torna, il
-programma mostra **quello** una volta sola, dice quante volte si ripete, e
-stampa solo le battute in cui il bassista ha fatto qualcosa di diverso:
-
-```
-Giro di battuta, uguale in 21 battute su 26. Cambia alle battute 1, 10, 11, 19, 26.
-
-G|--------------0-----------------|
-D|----0-----3---------3---------0-|
-A|------------------------3-------|
-E|--------------------------------|
-```
-
-Con `--tutto` stampa comunque tutte le battute; nel file di testo ci sono
-sempre tutte.
-
-Opzioni utili: `--senza-battute` se il pezzo non ha un tempo stabile,
-`--partenza` se la prima stanghetta cade sul movimento sbagliato,
-`--polifonico` per tenere gli accordi invece di una nota alla volta,
-`--gia-separato` per saltare Demucs se la traccia isolata ce l'hai già.
-
-## Quanto ci si può fidare
-
-Onestamente, dipende dallo strumento:
-
-| | come viene |
+| | |
 |---|---|
-| basso | bene: è quasi sempre una nota alla volta, ed è il caso per cui è fatto questo programma |
-| batteria | non è previsto qui: serve un modello dedicato (ADTOF, Omnizart) |
-| chitarra pulita | discreta, ma va corretta a mano |
-| chitarra distorta dentro un mix | poco: accordi, bend e palm mute confondono il trascrittore |
+| **Library** | All your music by artist and album, with covers, years, durations, and badges for *TAB* (a Guitar Pro tab exists) and *STEMS ✓* (already split). Covers missing from your files are fetched from the iTunes Search API. |
+| **Auto-sync** | The tab is aligned to the full recording with a chromagram + dynamic time warping, the classic score-to-audio alignment: about 3 seconds per song, live versions and remasters included. Fix any bar by clicking it while it plays; nudge the whole tab ±0.1 s. |
+| **Stems** | Demucs splits the recording into bass, drums, vocals and other. A mixer with level meters, mute and solo for each stem, and 0.5× / 0.75× slowdown without changing pitch. |
+| **Tabs** | Rendered by [alphaTab](https://github.com/CoderLine/alphaTab), all tracks of the file (bass first), from your `.gp3/.gp4/.gp5/.gpx/.gp` archives (zip files are read without extracting) or from a file you upload. Mark the right version once ("✓ This one") and it always opens. |
+| **Lyrics** | Synced lyrics from [LRCLIB](https://lrclib.net); speech-to-text (Whisper) only as a fallback. |
+| **Import** (last resort) | When no tab exists anywhere, the app writes its own draft: bass/guitar transcription (Basic Pitch), recovered repeated notes, hammer-ons, slides, bends and vibrato, chords snapped to half bars with guitar chord diagrams, riff normalization, drop-D tuning. A draft to fix by ear, not an official transcription. |
 
-Quello che esce è **una bozza da correggere**, non uno spartito finito. Il
-punto è arrivare in venti secondi dove a orecchio ci vorrebbe un'ora.
+![Tab synced to the recording](docs/tab-synced.png)
+![Stem mixer and our own transcription](docs/stems-mixer.png)
 
-## Com'è fatto dentro
+## Install (Linux)
 
-Cinque pezzi indipendenti, in ordine di catena:
-
-- `separa.py` — Demucs, la canzone in quattro (o sei) tracce.
-- `trascrivi.py` — Basic Pitch, con la finestra di frequenze stretta intorno
-  all'estensione dello strumento: a un basso non serve cercare note sopra il
-  Sol4, e non cercandole smette di inventarsele.
-- `pulizia.py` — le quattro pulizie che cambiano la faccia al risultato: via
-  le briciole, riattacca le code, **butta le armoniche** (una corda di basso
-  produce anche l'ottava e la doppia ottava, e il trascrittore le scrive come
-  note a sé), tieni una nota alla volta.
-- `diteggiatura.py` — la stessa nota si prende su più corde, e la scelta non
-  si fa nota per nota ma sull'intera frase: programmazione dinamica dove ogni
-  passo paga lo spostamento della mano rispetto al passo prima. Più tempo
-  passa fra due note, meno costa spostarsi.
-- `disegno.py` / `visore.py` — la tablatura in battute, su carta e a schermo.
-- `ostinato.py` — il giro che si ripete, e i punti in cui non si ripete. Il
-  confronto fra battute tollera un sedicesimo di scarto: una nota letta
-  storta dal trascrittore non deve far sembrare diverse due battute uguali.
-
-`metronomo.py` trova il tempo con Librosa e poi lo **affina sulle note**, e
-corregge due errori diversi. Il primo è di precisione: il battito viene
-trovato a 99.4 invece di 100, e mezzo punto dopo dieci secondi è mezza
-casella. Il secondo è più grave, ed è di livello: su un ostinato sincopato
-Librosa ha risposto **136 bpm dove ce n'erano 100**, e nessun ritocco fine
-può salvare una griglia sbagliata di un terzo. Quindi si provano anche i
-livelli metrici vicini — metà, doppio, puntato — e si tiene quello su cui
-cade più roba. Il livello rilevato si scavalca solo con una prova netta.
-
-## Prove
+Requirements: Python 3.11 (Basic Pitch does not support newer versions yet), `ffmpeg`, `unzip`, Google Chrome or Chromium. An NVIDIA GPU makes stem separation ~5-10× faster but is not required.
 
 ```bash
-python -m pytest test
+git clone https://github.com/emanueledicuonzo-maker/tab-to-music.git
+cd tab-to-music
+python3.11 -m venv .venv-311
+.venv-311/bin/pip install -r requirements.txt
+./avvia.sh            # starts the local server on http://127.0.0.1:8777 and opens the app
 ```
 
-Ventinove prove sulla parte che non dipende da nessun modello: pulizia,
-diteggiatura, griglia, disegno. Non serve installare niente di pesante per
-farle girare.
+Put your music in `~/Music` (or the folder `xdg-user-dir MUSIC` points to) and your Guitar Pro archives (`.zip` files whose name contains "tab" or "guitar pro") in the same folder. Processed songs are stored in `<Music>/tab/`.
 
-La catena `trascrivi → pulizia → diteggiatura → disegno` è stata provata due
-volte su basso sintetizzato, perché su musica registrata non ci si arriva da
-qui (vedi sotto).
+The first time, use **Install app** to install it as a desktop app (PWA).
 
-1. **Otto note pulite, ripetute** (Mi Mi Sol La Si La Sol Mi, 100 bpm):
-   sedici note su sedici corrette, tempo ritrovato a 100.18 bpm.
-2. **Un ostinato di sei note per un minuto**, con ±20 ms di tremolio negli
-   attacchi, dinamica variabile, un fondo di rumore che imita la sbavatura
-   che Demucs lascia, e due giri alterati di proposito su ventiquattro. Il
-   tempo è stato raddrizzato da 136 a 99.96 bpm, il giro è stato riconosciuto
-   e mostrato una volta al posto di ventisei battute, e **le due variazioni
-   sono state trovate entrambe**, con un falso allarme.
-**La separazione con Demucs non è stata provata**: i pesi del modello si
-scaricano da internet e la macchina su cui è stato scritto questo codice non
-ci arriva. È l'unico pezzo della catena che gira a scatola chiusa.
+## How it works
+
+```
+your recording ──┐
+                 ├─ chroma (librosa) ─┐
+Guitar Pro tab ──┘   notes of every    ├─ DTW ─► bar → time in the recording ─► alphaTab cursor
+                     track, as written ┘
+recording ─► Demucs ─► bass · drums · vocals · other ─► mixer (mute / solo / meters)
+```
+
+- `tablatura/app.py` — local server: library, archives, sync, job queue.
+- `tablatura/allinea.py` — tab-to-recording alignment.
+- `tablatura/guitarpro.py`, `libreria.py`, `online.py` — tab archives, music index, LRCLIB and covers.
+- `tablatura/*.py` (cli, trascrivi, pulizia, diteggiatura, accordi, tecnica…) — the Import pipeline ([details](docs/tablatura-cli.md), in Italian).
+- `python -m pytest test` — tests for the parts that do not need models.
+
+## Legal
+
+The code is released under the **Apache License 2.0**: use it, change it, sell it — but keep the `NOTICE` file, which credits **Getaweb (https://getaweb.it)** as the original author. No tabs, music or audio are distributed with the project: bring your own. Guitar Pro is a trademark of Arobas Music; this project is not affiliated with Arobas Music, Songsterr, Soundslice or Ultimate Guitar.
+
+---
+
+## Italiano
+
+**Le tue tablature Guitar Pro sincronizzate sul disco vero, con gli strumenti che puoi spegnere.**
+
+Scegli una canzone dalla tua musica: Tab to Music trova la tablatura Guitar Pro nei tuoi archivi, la sincronizza battuta per battuta sul disco in pochi secondi, e suoni con il cursore che segue la registrazione. Separi le tracce (basso, batteria, voce, resto) e spegni o isoli la parte che vuoi studiare. Niente strumenti sintetizzati, niente cloud, niente abbonamenti: gira tutto sul tuo computer.
+
+- **Libreria**: tutta la tua musica per artista e album, con copertine, anni, durate ed etichette *TAB* e *STEMS ✓*.
+- **Sincronia automatica** sul disco intero (cromagramma + DTW), correggibile con un clic sulla battuta.
+- **Tracce separate** con Demucs: mixer con livelli, mute, solo, rallentatore.
+- **Tablature** dai tuoi archivi Guitar Pro (anche zip, senza estrarre) o caricate da te; tutte le tracce del file, basso per primo.
+- **Testi** da LRCLIB; Whisper solo se non ci sono.
+- **Importa** come ultima spiaggia: quando la tablatura non esiste (per esempio molta musica italiana), il programma ne scrive una bozza da correggere a orecchio.
+
+*Ideato e sviluppato da [Getaweb](https://getaweb.it).* Licenza Apache 2.0: chi la riusa deve conservare il file `NOTICE` che cita Getaweb come autore.

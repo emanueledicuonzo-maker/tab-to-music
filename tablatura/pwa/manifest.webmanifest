@@ -1,7 +1,7 @@
 {
-  "name": "Tablatura",
-  "short_name": "Tablatura",
-  "description": "Dalla canzone alla tablatura, con accordi, testo e mixer delle tracce.",
+  "name": "Tab to Music",
+  "short_name": "Tab to Music",
+  "description": "Guitar Pro tabs synced to your own music, with stem separation. By getaweb.it",
   "id": "/",
   "start_url": "/",
   "scope": "/",

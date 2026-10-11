@@ -2,7 +2,7 @@
 <html lang="it">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tablatura</title>
+<title>Tab to Music</title>
 <style>
   :root { color-scheme: dark; --fondo: #06060b; --pannello: #ffffff08; --bordo: #ffffff14; --testo: #eef0f6; --tenue: #9aa0b4;
           --acceso: #ffb020; --rosa: #ff3d81; --ciano: #2de2e6; --verde: #6bffa0; }
@@ -48,10 +48,10 @@
 </style>
 
 <section class="testata">
-  <div class="etichetta">Tablatura Guitar Pro · <b id="fonte"></b></div>
+  <div class="etichetta">Guitar Pro tab · <b id="fonte"></b></div>
   <h1 id="titolo">…</h1>
-  <button id="giusta" title="Segna questa versione come quella giusta: la libreria aprirà sempre lei">✓ È questa</button>
-  <div id="disco"><span class="nota">Cerco il disco in Musica…</span></div>
+  <button id="giusta" title="Mark this version as the right one: the library will always open it">✓ This one</button>
+  <div id="disco"><span class="nota">Looking for the recording in your music…</span></div>
 </section>
 
 <div id="tracce"></div>
@@ -68,10 +68,13 @@ const parti = NOME.split("/").pop().replace(/\.[^.]+$/, "").split(" - ");
 const ARTISTA = parti[0], TITOLO = parti.slice(1).join(" - ") || parti[0];
 $("titolo").textContent = TITOLO;
 $("fonte").textContent = ARTISTA;
-document.title = `${TITOLO} — Tablatura`;
+document.title = `${TITOLO} — Tab to Music`;
 
 const FAMIGLIE = ["Pianoforte", "Percussioni", "Organo", "Chitarra", "Basso", "Archi", "Archi", "Ottoni",
                   "Fiati", "Flauti", "Synth", "Synth", "Effetti", "Etnici", "Percussioni", "Effetti"];
+const EN = { Pianoforte: "Piano", Percussioni: "Percussion", Organo: "Organ", Chitarra: "Guitar", Basso: "Bass", Archi: "Strings",
+             Ottoni: "Brass", Fiati: "Reeds", Flauti: "Flutes", Synth: "Synth", Effetti: "Effects", Etnici: "Ethnic", Batteria: "Drums",
+             Voce: "Vocals", Strumento: "Instrument" };
 const ICONE = { Pianoforte: "🎹", Organo: "🎹", Chitarra: "🎸", Basso: "🎸", Batteria: "🥁", Archi: "🎻", Ottoni: "🎺",
                 Fiati: "🎷", Flauti: "🪈", Synth: "🎛️", Voce: "🎤" };
 function strumentoDi(t) {
@@ -107,10 +110,10 @@ function disegnaTracce(score) {
     const tipo = strumentoDi(t);
     const r = document.createElement("div");
     r.className = "traccia" + (i === vista ? " vista" : "");
-    r.innerHTML = `<span class="nome" title="Mostra questa traccia"><span>${ICONE[tipo] || "🎵"}</span><span><b></b><small></small></span></span>
+    r.innerHTML = `<span class="nome" title="Show this track"><span>${ICONE[tipo] || "🎵"}</span><span><b></b><small></small></span></span>
 `;
-    r.querySelector("b").textContent = t.name?.trim() || tipo;
-    r.querySelector("small").textContent = t.name?.trim() ? tipo : `traccia ${i + 1}`;
+    r.querySelector("b").textContent = t.name?.trim() || EN[tipo] || tipo;
+    r.querySelector("small").textContent = t.name?.trim() ? EN[tipo] || tipo : `track ${i + 1}`;
     r.querySelector(".nome").onclick = () => { vista = i; at.renderTracks([t]); disegnaTracce(score); };
     el.append(r);
   });
@@ -129,7 +132,7 @@ $("giusta").onclick = async () => {
   if (gia) delete giuste[CHIAVE]; else giuste[CHIAVE] = { archivio: ARCHIVIO, nome: NOME };
   await fetch("/api/preferenze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ gpGiuste: giuste }) });
   $("giusta").classList.toggle("attivo", !gia);
-  $("giusta").textContent = gia ? "✓ È questa" : "✓ È questa (segnata)";
+  $("giusta").textContent = gia ? "✓ This one" : "✓ This one (marked)";
 };
 
 // Il disco vero: se c'è in Musica, la tablatura si suona lì sopra.
@@ -142,11 +145,11 @@ async function suonaSul(percorso) {
   const r = await fetch(`/api/libreria/disco?artista=${encodeURIComponent(ARTISTA)}&titolo=${encodeURIComponent(TITOLO)}`).then(r => r.json()).catch(() => ({ dischi: [] }));
   const el = $("disco");
   el.textContent = "";
-  if (!r.dischi.length) { el.innerHTML = `<span class="nota">Questa canzone non c'è nella tua musica: la tablatura si può solo leggere.</span>`; return; }
-  el.innerHTML = `<span class="nota">Il disco c'è:</span>`;
+  if (!r.dischi.length) { el.innerHTML = `<span class="nota">This song is not in your music: the tab can only be read.</span>`; return; }
+  el.innerHTML = `<span class="nota">The recording is here:</span>`;
   for (const d of r.dischi.slice(0, 4)) {
     const b = document.createElement("button"); b.className = el.querySelector("button") ? "" : "primario";
-    b.textContent = "▶ Suona sul disco: " + d.percorso.split("/").slice(-2).join(" / ");
+    b.textContent = "▶ Play on the recording: " + d.percorso.split("/").slice(-2).join(" / ");
     b.onclick = () => suonaSul(d.percorso);
     el.append(b);
   }

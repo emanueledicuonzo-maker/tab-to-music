@@ -1,6 +1,6 @@
 """La Libreria: tutta la musica che hai, per artista, senza girare cartella per cartella.
 
-Artista, titolo e album vengono dai tag dei file (mutagen); dove i tag non ci
+Artista, titolo e album vengono dai tag dei file (tinytag); dove i tag non ci
 sono, dal nome della cartella e del file. L'elenco si tiene in un file e si
 rifà solo per le canzoni nuove o cambiate.
 """
@@ -16,23 +16,23 @@ INDICE = Path.home() / ".config" / "tablatura" / "libreria.json"
 
 
 def _dai_tag(file: Path) -> dict:
+    """Artista, titolo, album, anno, numero e durata dai tag (tinytag, licenza MIT)."""
     try:
-        import mutagen
+        from tinytag import TinyTag
 
-        tag = mutagen.File(str(file), easy=True)
+        tag = TinyTag.get(str(file))
     except Exception:
         tag = None
-    prendi = lambda k: (tag.get(k) or [""])[0].strip() if tag and tag.tags is not None else ""
-    durata = float(getattr(getattr(tag, "info", None), "length", 0) or 0)
-    numero = re.match(r"\d+", prendi("tracknumber") or "")
-    anno = re.search(r"(19|20)\d\d", prendi("date") or prendi("originaldate") or "")
+    prendi = lambda k: str(getattr(tag, k, None) or "").strip() if tag else ""
     # L'artista del brano, non quello dell'album: nelle raccolte («Various
     # Artists») l'artista dell'album non dice niente.
     album_artista = prendi("albumartist")
     if re.search(r"various|vari|compilation|^va$", album_artista, re.I):
         album_artista = ""
+    numero = re.match(r"\d+", prendi("track"))
+    anno = re.search(r"(19|20)\d\d", prendi("year"))
     return {"artista": prendi("artist") or album_artista, "titolo": prendi("title"),
-            "album": prendi("album"), "durata": round(durata, 1),
+            "album": prendi("album"), "durata": round(float(getattr(tag, "duration", 0) or 0), 1),
             "traccia": int(numero.group()) if numero else None, "anno": anno.group() if anno else ""}
 
 
@@ -65,7 +65,7 @@ def aggiorna(cartelle: list[Path], escludi: list[Path]) -> list[dict]:
                 continue
             percorso, quando = str(f), f.stat().st_mtime
             voce = vecchio.get(percorso)
-            if not voce or voce.get("quando") != quando or voce.get("v") != 3:
+            if not voce or voce.get("quando") != quando or voce.get("v") != 4:
                 dati = _dai_tag(f)
                 ripiego = _dal_nome(f)
                 if dati["traccia"] is None:
@@ -74,7 +74,7 @@ def aggiorna(cartelle: list[Path], escludi: list[Path]) -> list[dict]:
                 if not dati["anno"]:
                     a = re.search(r"\((19|20)\d\d", f.parent.name)
                     dati["anno"] = a.group()[1:] if a else ""
-                voce = {"percorso": percorso, "quando": quando, "v": 3, "traccia": dati["traccia"], "anno": dati["anno"],
+                voce = {"percorso": percorso, "quando": quando, "v": 4, "traccia": dati["traccia"], "anno": dati["anno"],
                         "artista": dati["artista"] or ripiego["artista"] or "Sconosciuto",
                         "titolo": dati["titolo"] or ripiego["titolo"],
                         "album": dati["album"] or ripiego["album"], "durata": dati["durata"]}
@@ -117,19 +117,12 @@ def cerca(voci: list[dict], testo: str, quante: int = 60) -> list[dict]:
 def copertina_interna(file: Path) -> tuple[bytes, str] | None:
     """La copertina dentro il file audio (FLAC, MP3, M4A), se c'è."""
     try:
-        import mutagen
+        from tinytag import TinyTag
 
-        audio = mutagen.File(str(file))
+        tag = TinyTag.get(str(file), image=True)
+        immagine = tag.images.any
     except Exception:
         return None
-    if audio is None:
+    if immagine is None or not immagine.data:
         return None
-    for immagine in getattr(audio, "pictures", []) or []:
-        return immagine.data, immagine.mime or "image/jpeg"
-    for chiave in list((audio.tags or {}).keys()):
-        if str(chiave).startswith("APIC"):
-            apic = audio.tags[chiave]
-            return apic.data, apic.mime or "image/jpeg"
-        if chiave == "covr":
-            return bytes(audio.tags["covr"][0]), "image/jpeg"
-    return None
+    return immagine.data, immagine.mime_type or "image/jpeg"

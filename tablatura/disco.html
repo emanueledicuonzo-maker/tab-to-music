@@ -2,7 +2,7 @@
 <html lang="it">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tablatura</title>
+<title>Tab to Music</title>
 <style>
   :root { color-scheme: dark; --fondo: #06060b; --pannello: #ffffff08; --bordo: #ffffff14; --testo: #eef0f6; --tenue: #9aa0b4;
           --acceso: #ffb020; --rosa: #ff3d81; --ciano: #2de2e6; --verde: #6bffa0; }
@@ -61,33 +61,33 @@
 <section class="testata">
   <img id="copertina" alt="" hidden>
   <div>
-    <div class="etichetta">Libreria · <b id="artista"></b></div>
+    <div class="etichetta">Library · <b id="artista"></b></div>
     <h1 id="titolo">…</h1>
     <div id="album"></div>
   </div>
 </section>
 
-<div class="riquadro" id="tabInfo"><span class="nota">Cerco la tablatura…</span></div>
+<div class="riquadro" id="tabInfo"><span class="nota">Looking for the tab…</span></div>
 <div class="riquadro" id="tracceInfo" hidden></div>
 
 <audio id="disco" preload="auto"></audio>
 <div class="trasporto" id="trasporto" hidden>
-  <button id="via" title="Suona / ferma (spazio)">▶</button>
+  <button id="via" title="Play / pause (space)">▶</button>
   <input id="scorri" type="range" min="0" max="1000" value="0">
   <span id="tempo">0:00</span>
-  <button data-v="0.5">0,5×</button><button data-v="0.75">0,75×</button><button data-v="1" class="attivo">1×</button>
-  <button id="prima" title="Tutta la tablatura un decimo di secondo prima">−0,1 s</button>
-  <button id="dopo" title="Tutta la tablatura un decimo di secondo dopo">+0,1 s</button>
-  <button id="rifai" title="Rifà la sincronia automatica, buttando le correzioni">Risincronizza</button>
+  <button data-v="0.5">0.5×</button><button data-v="0.75">0.75×</button><button data-v="1" class="attivo">1×</button>
+  <button id="prima" title="Move the whole tab a tenth of a second earlier">−0.1 s</button>
+  <button id="dopo" title="Move the whole tab a tenth of a second later">+0.1 s</button>
+  <button id="rifai" title="Redo the automatic sync, discarding your fixes">Resync</button>
   <span id="stato"></span>
 </div>
 <div id="tracce"></div>
 <div id="alphaTab"></div>
 
 <dialog id="dScegli">
-  <div class="dTesta"><b>Scegli la tablatura</b><button class="chiudi" aria-label="Chiudi">×</button></div>
+  <div class="dTesta"><b>Choose the tab</b><button class="chiudi" aria-label="Close">×</button></div>
   <div id="candidati"></div>
-  <label class="carica">…oppure carica una tablatura scaricata da te (.gp, .gpx, .gp5, .gp4, .gp3)
+  <label class="carica">…or upload a tab you downloaded (.gp, .gpx, .gp5, .gp4, .gp3)
     <input type="file" id="file" accept=".gp,.gpx,.gp5,.gp4,.gp3,.gtp"></label>
 </dialog>
 
@@ -100,6 +100,9 @@ const disco = $("disco");
 const orologio = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 const FAMIGLIE = ["Pianoforte", "Percussioni", "Organo", "Chitarra", "Basso", "Archi", "Archi", "Ottoni",
                   "Fiati", "Flauti", "Synth", "Synth", "Effetti", "Etnici", "Percussioni", "Effetti"];
+const EN = { Pianoforte: "Piano", Percussioni: "Percussion", Organo: "Organ", Chitarra: "Guitar", Basso: "Bass", Archi: "Strings",
+             Ottoni: "Brass", Fiati: "Reeds", Flauti: "Flutes", Synth: "Synth", Effetti: "Effects", Etnici: "Ethnic", Batteria: "Drums",
+             Voce: "Vocals", Strumento: "Instrument" };
 const ICONE = { Pianoforte: "🎹", Organo: "🎹", Chitarra: "🎸", Basso: "🎸", Batteria: "🥁", Archi: "🎻", Ottoni: "🎺",
                 Fiati: "🎷", Flauti: "🪈", Synth: "🎛️", Voce: "🎤" };
 const strumentoDi = t => t.playbackInfo?.primaryChannel === 9 || t.staves[0]?.isPercussion ? "Batteria"
@@ -109,7 +112,7 @@ const strumentoDi = t => t.playbackInfo?.primaryChannel === 9 || t.staves[0]?.is
 const info = await fetch(`/api/disco/info?percorso=${P}`).then(r => r.json());
 const v = info.voce;
 $("titolo").textContent = v.titolo; $("artista").textContent = v.artista; $("album").textContent = v.album;
-document.title = `${v.titolo} — Tablatura`;
+document.title = `${v.titolo} — Tab to Music`;
 $("copertina").src = `/api/disco/copertina?percorso=${P}`;
 $("copertina").onload = () => { $("copertina").hidden = false; $("alone").style.backgroundImage = `url('${$("copertina").src}')`; };
 disco.src = `/disco/audio?percorso=${P}`;
@@ -120,37 +123,37 @@ function mostraTab() {
   const el = $("tabInfo");
   el.textContent = "";
   if (!info.tablatura) {
-    el.innerHTML = `<span class="nota">Per questa canzone non ho trovato una tablatura Guitar Pro.</span>`;
-    const scegli = document.createElement("button"); scegli.textContent = "Carica la tua…"; scegli.onclick = apriScelta;
-    const importa = document.createElement("button"); importa.textContent = "Importa (bozza automatica)";
-    importa.title = "Il programma ascolta il disco e scrive una tablatura sua: una bozza, utile quando la tablatura vera non c'è";
+    el.innerHTML = `<span class="nota">No Guitar Pro tab found for this song.</span>`;
+    const scegli = document.createElement("button"); scegli.textContent = "Upload yours…"; scegli.onclick = apriScelta;
+    const importa = document.createElement("button"); importa.textContent = "Import (automatic draft)";
+    importa.title = "The app listens to the recording and writes its own tab: a draft, useful when no real tab exists";
     importa.onclick = separa;
     el.append(scegli, importa);
     return;
   }
   const t = info.tablatura;
   const nome = (t.nome || "").split("/").pop();
-  el.innerHTML = `<span class="nota">Tablatura: <b style="color:var(--testo)"></b></span>`;
-  el.querySelector("b").textContent = nome + (t.tua ? " (tua)" : "");
+  el.innerHTML = `<span class="nota">Tab: <b style="color:var(--testo)"></b></span>`;
+  el.querySelector("b").textContent = nome + (t.tua ? " (yours)" : "");
   const giusta = document.createElement("button"); giusta.id = "giusta";
-  giusta.textContent = t.scelta ? "✓ È questa (segnata)" : "✓ È questa";
+  giusta.textContent = t.scelta ? "✓ This one (marked)" : "✓ This one";
   giusta.classList.toggle("attivo", !!t.scelta);
-  giusta.title = "Segna questa tablatura per questo disco: si aprirà sempre lei";
+  giusta.title = "Mark this tab for this recording: it will always open";
   giusta.onclick = async () => {
     if (t.tua) return;
     await fetch("/api/disco/scegli", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ percorso: PERCORSO, archivio: t.archivio, nome: t.nome }) });
-    t.scelta = true; giusta.textContent = "✓ È questa (segnata)"; giusta.classList.add("attivo");
+    t.scelta = true; giusta.textContent = "✓ This one (marked)"; giusta.classList.add("attivo");
   };
-  const cambia = document.createElement("button"); cambia.textContent = "Cambia…"; cambia.onclick = apriScelta;
+  const cambia = document.createElement("button"); cambia.textContent = "Change…"; cambia.onclick = apriScelta;
   el.append(giusta, cambia);
 }
 async function apriScelta() {
   $("dScegli").showModal();
   const el = $("candidati");
-  el.innerHTML = "<p>Cerco negli archivi…</p>";
+  el.innerHTML = "<p>Searching the archives…</p>";
   const lista = await fetch(`/api/disco/candidati?percorso=${P}`).then(r => r.json()).catch(() => []);
   el.textContent = "";
-  if (!lista.length) el.innerHTML = "<p>Negli archivi non c'è: carica una tablatura scaricata da te.</p>";
+  if (!lista.length) el.innerHTML = "<p>Not in the archives: upload a tab you downloaded.</p>";
   for (const c of lista) {
     const b = document.createElement("button");
     b.className = "candidato" + (c.ha ? " ha" : "");
@@ -178,26 +181,26 @@ async function separa() {
 }
 function aspetta(id) {
   const el = $("tracceInfo"); el.hidden = false;
-  el.innerHTML = `<span class="nota">Sto lavorando il disco (3-4 minuti): tracce separate${info.tablatura ? "" : ", tablatura automatica"} e testo.</span>`;
+  el.innerHTML = `<span class="nota">Working on the recording (3-4 minutes): stems${info.tablatura ? "" : ", automatic tab"} and lyrics.</span>`;
   const giro = setInterval(async () => {
     const { coda } = await fetch("/api/stato").then(r => r.json());
     const l = coda.find(l => `${l.album}/${l.titolo}` === id);
     if (l && l.stato === "fatta") { clearInterval(giro); info.fatta = id; mostraTracce(); }
-    if (l && l.stato === "errore") { clearInterval(giro); el.innerHTML = `<span class="nota">Il lavoro sul disco non è riuscito.</span>`; }
+    if (l && l.stato === "errore") { clearInterval(giro); el.innerHTML = `<span class="nota">Processing the recording failed.</span>`; }
   }, 3000);
 }
 function mostraTracce() {
   const el = $("tracceInfo"); el.hidden = false; el.textContent = "";
   if (info.fatta) {
-    el.innerHTML = `<span class="ok">✓ Tracce separate pronte.</span>`;
-    const b = document.createElement("button"); b.className = "primario"; b.textContent = "Apri col mixer delle tracce";
-    b.title = "Basso, batteria, voce e resto separati: mute e solo sul disco vero";
+    el.innerHTML = `<span class="ok">✓ Stems ready.</span>`;
+    const b = document.createElement("button"); b.className = "primario"; b.textContent = "Open with the stem mixer";
+    b.title = "Bass, drums, vocals and the rest split apart: mute and solo on the real recording";
     b.onclick = () => { try { localStorage.setItem("vista", info.tablatura ? "gp" : "tab"); } catch {} disco.pause();
       window.parent.apri ? window.parent.apri(info.fatta) : (location.href = "/"); };
     el.append(b);
   } else if (info.tablatura) {
-    el.innerHTML = `<span class="nota">Vuoi spegnere o isolare il basso, la voce o la batteria del disco?</span>`;
-    const b = document.createElement("button"); b.textContent = "Separa le tracce"; b.onclick = separa; el.append(b);
+    el.innerHTML = `<span class="nota">Want to mute or solo the bass, vocals or drums of the recording?</span>`;
+    const b = document.createElement("button"); b.textContent = "Split stems"; b.onclick = separa; el.append(b);
   }
 }
 mostraTab(); mostraTracce();
@@ -205,7 +208,7 @@ mostraTab(); mostraTracce();
 // ---------------------------------------------------------------- tablatura e sincronia
 if (info.tablatura) {
   $("trasporto").hidden = false;
-  $("stato").textContent = "Carico la tablatura…";
+  $("stato").textContent = "Loading the tab…";
   const at = new alphaTab.AlphaTabApi($("alphaTab"), {
     core: { fontDirectory: "/pwa/alphatab/font/" },
     display: { staveProfile: alphaTab.StaveProfile.Tab, resources: { mainGlyphColor: "#d9dcea", secondaryGlyphColor: "#9aa0b4",
@@ -267,16 +270,16 @@ if (info.tablatura) {
   }
   async function sincronizza(forza) {
     const salvata = forza ? {} : await fetch(`/api/disco/sincronia?percorso=${P}`).then(r => r.json()).catch(() => ({}));
-    if (salvata.punti) { applica(salvata.punti, false); $("stato").textContent = "Sincronia salvata (con le tue correzioni)."; return; }
+    if (salvata.punti) { applica(salvata.punti, false); $("stato").textContent = "Saved sync (with your fixes)."; return; }
     let ms = salvata.automatica;
     if (!ms) {
-      $("stato").textContent = "Sincronizzo la tablatura col disco…";
+      $("stato").textContent = "Syncing the tab to the recording…";
       const r = await fetch("/api/allinea", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ percorso: PERCORSO, eventi: eventiDelFile(), battute: tempi.map(o => o.inizio) }) }).then(r => r.json());
       ms = r.automatica;
     }
     applica(tempi.map((o, k) => ({ barIndex: o.bar, barOccurence: o.occ, barPosition: 0, millisecondOffset: ms[k] })), false);
-    $("stato").textContent = "Sincronizzata col disco. Se una battuta parte storta: mentre suona, cliccala nel momento giusto.";
+    $("stato").textContent = "Synced to the recording. If a bar is off: while playing, click it at the right moment.";
   }
   at.scoreLoaded.on(s => {
     score = s; tempi = tempiDelFile(s);
@@ -292,8 +295,8 @@ if (info.tablatura) {
       const b = document.createElement("button");
       b.className = "strumento" + (i === vista ? " attivo" : "");
       b.innerHTML = `<span class="icona">${ICONE[tipo] || "🎵"}</span><span><b></b><small></small></span>`;
-      b.querySelector("b").textContent = t.name?.trim() || tipo;
-      b.querySelector("small").textContent = t.name?.trim() ? tipo : `traccia ${i + 1}`;
+      b.querySelector("b").textContent = t.name?.trim() || EN[tipo] || tipo;
+      b.querySelector("small").textContent = t.name?.trim() ? EN[tipo] || tipo : `track ${i + 1}`;
       b.onclick = () => { vista = i; disegnaStrumenti(); at.renderTracks([t]); applica(punti, false); };
       el.append(b);
     });
@@ -307,7 +310,7 @@ if (info.tablatura) {
     if (k < 0) return;
     const delta = adesso - punti[k].millisecondOffset;
     applica(punti.map((p, i) => (i >= k ? { ...p, millisecondOffset: Math.max(0, p.millisecondOffset + delta) } : p)), true);
-    $("stato").textContent = `Battuta ${bar + 1} agganciata a ${orologio(adesso / 1000)}.`;
+    $("stato").textContent = `Bar ${bar + 1} locked at ${orologio(adesso / 1000)}.`;
   });
   $("prima").onclick = () => applica(punti.map(p => ({ ...p, millisecondOffset: Math.max(0, p.millisecondOffset - 100) })), true);
   $("dopo").onclick = () => applica(punti.map(p => ({ ...p, millisecondOffset: p.millisecondOffset + 100 })), true);

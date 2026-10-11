@@ -85,19 +85,28 @@ class Lavoro:
 
 # Le fasi del lavoro, riconosciute dalle righe che stampa il programma.
 FASI = [
-    ("separo", "separo le tracce"),
-    ("metronomo", "cerco il metronomo"),
-    ("trascrivo il ", "trascrivo le note"),
-    ("trascrivo il testo", "trascrivo il testo"),
-    ("riconosco gli accordi", "riconosco gli accordi"),
-    ("riconosco legati", "legati e bending"),
+    ("separo", "splitting stems"),
+    ("metronomo", "finding the tempo"),
+    ("trascrivo il ", "transcribing notes"),
+    ("trascrivo il testo", "transcribing lyrics"),
+    ("riconosco gli accordi", "detecting chords"),
+    ("riconosco legati", "hammer-ons & bends"),
 ]
 RUMORE = re.compile(r"^\d{4}-\d\d-\d\d|^[EWI]\d{4}|tensorflow|cuda|cudnn|cublas|oneDNN|TF-TRT|AVX|WARNING|rebuild|absl|^\s*warn", re.I)
 
 # Le tablature da collegare a una canzone appena finisce di lavorarla:
 # percorso del file audio → (archivio, nome nello zip).
 da_collegare: dict[str, tuple[str, str]] = {}
-CARTELLE_DISCHI = [MUSICA, Path.home() / "Scaricati"]
+def _cartella_xdg(nome: str, ripiego: str) -> Path:
+    try:
+        uscita = subprocess.run(["xdg-user-dir", nome], capture_output=True, text=True).stdout.strip()
+    except OSError:
+        uscita = ""
+    return Path(uscita) if uscita and uscita != str(Path.home()) else Path.home() / ripiego
+
+
+# Dove cercare i dischi: la musica, e i download (dove finiscono gli album appena scaricati).
+CARTELLE_DISCHI = [MUSICA, _cartella_xdg("DOWNLOAD", "Downloads")]
 
 TUE = TAB / "_tablature_tue"          # i file Guitar Pro caricati da te
 SINCRONIE = FILE_STATO.parent / "sincronie"

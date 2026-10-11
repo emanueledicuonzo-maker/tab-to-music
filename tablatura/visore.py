@@ -237,35 +237,35 @@ PAGINA = """<!doctype html>
   <div class="chi">
     <img id="copertina" src="__COPERTINA__" alt="">
     <div>
-      <div class="etichetta">Tablatura · <b>__STRUMENTO__</b> · __BPM__ bpm</div>
+      <div class="etichetta">Tab · <b>__STRUMENTO__</b> · __BPM__ bpm</div>
       <h1>__TITOLO__</h1>
       <div class="album">__ALBUM__</div>
-      <div class="accordatura" title="Accordatura, dalla corda più grave">__ACCORDATURA__</div>
+      <div class="accordatura" title="Tuning, from the lowest string">__ACCORDATURA__</div>
     </div>
   </div>
-  <div id="battiti" title="I movimenti della battuta"><i></i><i></i><i></i><i></i></div>
+  <div id="battiti" title="Beats of the bar"><i></i><i></i><i></i><i></i></div>
   <div class="ora-accordo"><span id="accordoOra">—</span><span id="accordoDopo"></span></div>
 </section>
 
 <div class="trasporto">
-  <button id="via" title="Suona / ferma (spazio)">▶</button>
+  <button id="via" title="Play / pause (space)">▶</button>
   <div class="linea">
     <canvas id="spettro"></canvas>
     <input id="scorri" type="range" min="0" max="1000" value="0">
   </div>
   <span id="tempo">0:00</span>
   <span id="velocita">
-    <button data-v="0.5">0,5×</button><button data-v="0.75">0,75×</button><button data-v="1" class="attivo">1×</button>
+    <button data-v="0.5">0.5×</button><button data-v="0.75">0.75×</button><button data-v="1" class="attivo">1×</button>
   </span>
-  <button id="luci" title="Luci a tempo">Luci</button>
+  <button id="luci" title="Lights on the beat">Luci</button>
 </div>
 
 <div id="tracce"></div>
 <div id="vista" hidden>
-  <button data-vista="tab" class="attivo">Tablatura</button><button data-vista="accordi">Accordi e testo</button><button data-vista="gp" id="vistaGP" hidden>Guitar Pro</button>
+  <button data-vista="tab" class="attivo">Our tab</button><button data-vista="accordi">Chords &amp; lyrics</button><button data-vista="gp" id="vistaGP" hidden>Guitar Pro</button>
 </div>
-<button id="bGP" title="Collega una tablatura Guitar Pro a questa canzone">Guitar Pro…</button>
-<button id="bGiro" hidden title="Le ripetizioni del giro rese uguali, o la tablatura come l'ha sentita il programma">Giro pulito</button>
+<button id="bGP" title="Attach a Guitar Pro tab to this song">Guitar Pro…</button>
+<button id="bGiro" hidden title="Riff repeats made identical, or the tab as the app heard it">Clean riffs</button>
 <div id="diagrammi"></div>
 <div id="legenda" hidden></div>
 <div id="tab"></div>
@@ -273,17 +273,17 @@ PAGINA = """<!doctype html>
 <section id="gp">
   <div id="gpStrumenti"></div>
   <div class="gpBarra">
-    <button id="gpPrima" title="Tutta la tablatura un decimo di secondo prima">−0,1 s</button>
-    <button id="gpDopo" title="Tutta la tablatura un decimo di secondo dopo">+0,1 s</button>
-    <button id="gpRifai" title="Rifà la sincronia automatica, buttando le correzioni">Risincronizza</button>
+    <button id="gpPrima" title="Move the whole tab a tenth of a second earlier">−0.1 s</button>
+    <button id="gpDopo" title="Move the whole tab a tenth of a second later">+0.1 s</button>
+    <button id="gpRifai" title="Redo the automatic sync, discarding your fixes">Resync</button>
     <span id="gpStato"></span>
   </div>
   <div id="alphaTab"></div>
 </section>
 <dialog id="dGP">
-  <div class="gpTesta"><b>Tablatura Guitar Pro</b><button class="chiudi" aria-label="Chiudi">×</button></div>
+  <div class="gpTesta"><b>Guitar Pro tab</b><button class="chiudi" aria-label="Close">×</button></div>
   <div id="gpElenco"></div>
-  <label class="gpCarica">…oppure carica un file scaricato da te (.gp, .gpx, .gp5, .gp4, .gp3)
+  <label class="gpCarica">…or upload a file you downloaded (.gp, .gpx, .gp5, .gp4, .gp3)
     <input type="file" id="gpFile" accept=".gp,.gpx,.gp5,.gp4,.gp3,.gtp"></label>
 </dialog>
 
@@ -317,7 +317,7 @@ for (const t of tracce) {
   riga.className = "striscia";
   riga.style.setProperty("--c", COLORI[t.nome] || "#ffb020");
   riga.innerHTML = `<canvas width="14" height="92"></canvas><span class="nome">${t.nome}</span>
-    <span class="tasti"><button class="spegni">suona</button><button class="solo">solo</button></span>
+    <span class="tasti"><button class="spegni">on</button><button class="solo">solo</button></span>
     <input type="range" min="0" max="100" value="100">`;
   t.metro = riga.querySelector("canvas");
   t.striscia = riga;
@@ -325,7 +325,7 @@ for (const t of tracce) {
   spegni.classList.add("attivo");
   spegni.onclick = () => {
     t.spento = !t.spento;
-    spegni.textContent = t.spento ? "muta" : "suona";
+    spegni.textContent = t.spento ? "muted" : "on";
     spegni.classList.toggle("attivo", !t.spento);
     applicaVolumi();
   };
@@ -349,8 +349,8 @@ for (const t of tracce) {
 // La casella è larga abbastanza per il tasto più lungo col suo segno, più un
 // trattino: senza, 12 seguito da 9 si leggeva «129», e h2 seguito da 2 «h22».
 const CELLA = Math.min(4, 1 + Math.max(1, ...DATI.note.map(n => String(n.tasto).length + (n.segno || "").length)));
-const SPIEGA = { h: "legato in salita (hammer-on)", p: "legato in discesa (pull-off)", "/": "glissato in salita",
-                 "\\\\": "glissato in discesa", b: "bending", "~": "vibrato", tr: "trillo" };
+const SPIEGA = { h: "hammer-on", p: "pull-off", "/": "slide up",
+                 "\\\\": "slide down", b: "bend", "~": "vibrato", tr: "trill" };
 const PREFISSO = 3;  // " G|"
 const tab = document.getElementById("tab");
 const PB = DATI.perBattuta;
@@ -588,8 +588,8 @@ function disegna() {
         sopra.append(" ".repeat(Math.max(0, dove - colonna)));
         const s = document.createElement("span");
         s.className = e.variazione ? "giro variazione" : "giro";
-        s.textContent = `giro ${e.nome}${e.variazione ? "*" : ""}`;
-        s.title = e.variazione ? `variazione del giro ${e.nome}` : `giro ${e.nome}, ripetuto ${e.volte} volte`;
+        s.textContent = `riff ${e.nome}${e.variazione ? "*" : ""}`;
+        s.title = e.variazione ? `variation of riff ${e.nome}` : `riff ${e.nome}, repeated ${e.volte} times`;
         sopra.append(s);
         colonna = dove + s.textContent.length;
       }
@@ -789,7 +789,7 @@ function seguiRighi(ora) {
 {
   const b = document.getElementById("bGiro");
   b.hidden = !GIRI.etichette.size;
-  const mostra = () => { b.classList.toggle("attivo", giroPulito); b.textContent = giroPulito ? "Giro pulito" : "Come l'ha sentito"; };
+  const mostra = () => { b.classList.toggle("attivo", giroPulito); b.textContent = giroPulito ? "Clean riffs" : "As heard"; };
   mostra();
   b.onclick = () => {
     giroPulito = !giroPulito;
@@ -886,7 +886,7 @@ const BATTITO = DATI.durataCella * 4;
 let luci = true;
 try { luci = localStorage.getItem("luci") !== "spente"; } catch {}
 const bottoneLuci = document.getElementById("luci");
-const mostraLuci = () => { bottoneLuci.classList.toggle("attivo", luci); bottoneLuci.textContent = luci ? "Luci accese" : "Luci spente"; };
+const mostraLuci = () => { bottoneLuci.classList.toggle("attivo", luci); bottoneLuci.textContent = luci ? "Lights on" : "Lights off"; };
 mostraLuci();
 bottoneLuci.onclick = () => { luci = !luci; try { localStorage.setItem("luci", luci ? "accese" : "spente"); } catch {} mostraLuci(); };
 
@@ -979,7 +979,7 @@ function giro() {
     setTimeout(() => accordoOra.classList.remove("salto"), 120);
   }
   const dopo = accordi[k + 1];
-  accordoDopo.textContent = dopo ? `poi ${dopo.nome} tra ${Math.max(0, dopo.quando - ora).toFixed(1)}s` : "";
+  accordoDopo.textContent = dopo ? `then ${dopo.nome} in ${Math.max(0, dopo.quando - ora).toFixed(1)}s` : "";
   if (guida.duration) scorri.style.setProperty("--fatto", (ora / guida.duration * 100).toFixed(2) + "%");
   requestAnimationFrame(giro);
 }
@@ -1006,8 +1006,8 @@ function disegnaStrumenti() {
     const b = document.createElement("button");
     b.className = "strumento" + (i === gpTraccia ? " attivo" : "") + (tipo === "Basso" ? " basso" : "");
     b.innerHTML = `<span class="icona">${ICONE[tipo] || "🎵"}</span><span><b></b><small></small></span>`;
-    b.querySelector("b").textContent = t.name?.trim() || tipo;
-    b.querySelector("small").textContent = t.name?.trim() ? tipo : `traccia ${i + 1}`;
+    b.querySelector("b").textContent = t.name?.trim() || EN[tipo] || tipo;
+    b.querySelector("small").textContent = t.name?.trim() ? EN[tipo] || tipo : `track ${i + 1}`;
     b.onclick = () => {
       gpTraccia = i; gpManuale = true;
       disegnaStrumenti();
@@ -1017,7 +1017,7 @@ function disegnaStrumenti() {
     fila.append(b);
   });
   if (!gpScore.tracks.some(t => strumentoDi(t) === "Basso") && (DATI.strumento || "").includes("basso")) {
-    statoGP.textContent = "In questo file non c'è il basso: con «Guitar Pro…» scegline un altro.";
+    statoGP.textContent = "No bass in this file: pick another with «Guitar Pro…».";
   }
 }
 let at = null, gpScore = null, gpTraccia = 0, gpTempi = [], gpPunti = [];
@@ -1140,6 +1140,9 @@ function applicaPunti(punti, salva = true) {
 // General MIDI) e non dal nome: molti file hanno le tracce senza nome.
 const FAMIGLIE = ["Pianoforte", "Percussioni", "Organo", "Chitarra", "Basso", "Archi", "Archi", "Ottoni",
                   "Fiati", "Flauti", "Synth", "Synth", "Effetti", "Etnici", "Percussioni", "Effetti"];
+const EN = { Pianoforte: "Piano", Percussioni: "Percussion", Organo: "Organ", Chitarra: "Guitar", Basso: "Bass", Archi: "Strings",
+             Ottoni: "Brass", Fiati: "Reeds", Flauti: "Flutes", Synth: "Synth", Effetti: "Effects", Etnici: "Ethnic", Batteria: "Drums",
+             Voce: "Vocals", Strumento: "Instrument" };
 const ICONE = { Pianoforte: "🎹", Organo: "🎹", Chitarra: "🎸", Basso: "🎸", Batteria: "🥁", Archi: "🎻", Ottoni: "🎺",
                 Fiati: "🎷", Flauti: "🪈", Synth: "🎛️", Voce: "🎤" };
 function strumentoDi(t) {
@@ -1156,7 +1159,7 @@ function tracciaDelBasso(score) {
 
 async function apriGP() {
   if (at || !GP.file) return;
-  statoGP.textContent = "Carico la tablatura…";
+  statoGP.textContent = "Loading the tab…";
   await caricaScript("/pwa/alphatab/alphaTab.min.js");
   at = new alphaTab.AlphaTabApi(document.getElementById("alphaTab"), {
     core: { file: GP.file, fontDirectory: "/pwa/alphatab/font/", scriptFile: "/pwa/alphatab/alphaTab.min.js", useWorkers: false },
@@ -1186,9 +1189,9 @@ async function apriGP() {
     const pronto = () => {
       // La sincronia salvata vale se era fatta sulla stessa traccia (o sistemata a mano).
       if (salvata.punti && salvata.punti.length && (salvata.manuale || (salvata.v === 2 && salvata.traccia === gpTraccia))) {
-        gpManuale = !!salvata.manuale; applicaPunti(salvata.punti, false); statoGP.textContent = "Sincronia salvata.";
+        gpManuale = !!salvata.manuale; applicaPunti(salvata.punti, false); statoGP.textContent = "Saved sync.";
       }
-      else { statoGP.textContent = "Sincronizzo con le note sentite…"; setTimeout(() => { applicaPunti(sincroniaAutomatica()); statoGP.textContent = "Sincronizzata in automatico. Se una battuta parte storta: falla suonare e cliccala nel momento giusto."; }, 30); }
+      else { statoGP.textContent = "Syncing with the notes heard…"; setTimeout(() => { applicaPunti(sincroniaAutomatica()); statoGP.textContent = "Synced automatically. If a bar is off: play it and click it at the right moment."; }, 30); }
     };
     if (guida.duration) pronto(); else guida.addEventListener("loadedmetadata", pronto, { once: true });
   });
@@ -1201,23 +1204,23 @@ async function apriGP() {
     if (k < 0) return;
     const delta = adesso - gpPunti[k].millisecondOffset;
     applicaPunti(gpPunti.map((p, i) => (i >= k ? { ...p, millisecondOffset: Math.max(0, p.millisecondOffset + delta) } : p)));
-    statoGP.textContent = `Battuta ${bar + 1} agganciata a ${orologio(adesso / 1000)}.`;
+    statoGP.textContent = `Bar ${bar + 1} locked at ${orologio(adesso / 1000)}.`;
   });
   gpManuale = false;
   document.getElementById("gpPrima").onclick = () => applicaPunti(gpPunti.map(p => ({ ...p, millisecondOffset: Math.max(0, p.millisecondOffset - 100) })));
   document.getElementById("gpDopo").onclick = () => applicaPunti(gpPunti.map(p => ({ ...p, millisecondOffset: p.millisecondOffset + 100 })));
-  document.getElementById("gpRifai").onclick = () => { applicaPunti(sincroniaAutomatica()); statoGP.textContent = "Rifatta la sincronia automatica."; };
+  document.getElementById("gpRifai").onclick = () => { applicaPunti(sincroniaAutomatica()); statoGP.textContent = "Automatic sync redone."; };
 }
 
 // Scegliere la tablatura: dall'archivio Guitar Pro, o un file scaricato da te.
 async function scegliGP() {
   const d = document.getElementById("dGP");
   const elenco = document.getElementById("gpElenco");
-  elenco.innerHTML = "<p>Cerco nell'archivio…</p>";
+  elenco.innerHTML = "<p>Searching the archives…</p>";
   d.showModal();
   const trovate = await fetch("/api/gp/cerca?id=" + encodeURIComponent(GP.id)).then(r => r.json()).catch(() => []);
   elenco.textContent = "";
-  if (!trovate.length) elenco.innerHTML = "<p>Nell'archivio non c'è. Carica un file Guitar Pro scaricato da te.</p>";
+  if (!trovate.length) elenco.innerHTML = "<p>Not in the archives. Upload a Guitar Pro file you downloaded.</p>";
   for (const t of trovate) {
     const r = document.createElement("button");
     r.className = "gpVoce";
@@ -1259,9 +1262,13 @@ ITALIANO = {"C": "Do", "C#": "Do#", "D": "Re", "D#": "Re#", "E": "Mi", "F": "Fa"
             "G#": "Sol#", "A": "La", "A#": "La#", "B": "Si"}
 
 
+INGLESE = {"basso 4 corde": "4-string bass", "basso drop D": "drop D bass", "basso 5 corde": "5-string bass",
+           "chitarra": "guitar", "chitarra drop D": "drop D guitar"}
+
+
 def accordatura(strumento: str, corde: list[str]) -> str:
-    """«Drop D · Re La Re Sol»: come va accordato lo strumento, ben in vista."""
-    nomi = " ".join(ITALIANO.get(c, c) for c in corde)
+    """«Drop D · D A D G»: come va accordato lo strumento, ben in vista."""
+    nomi = " ".join(corde)
     tipo = "Drop D" if "drop" in strumento.lower() else "Standard"
     return f"<b>{tipo}</b> {html.escape(nomi)}"
 
@@ -1271,6 +1278,7 @@ def pagina(
     guitarpro: str = "", id_canzone: str = "",
 ) -> str:
     """La pagina di una canzone, come testo."""
+    strumento = INGLESE.get(strumento, strumento)
     return (
         PAGINA.replace("__GUITARPRO__", json.dumps({"file": guitarpro, "id": id_canzone}))
         .replace("__ACCORDATURA__", accordatura(strumento, tab.get("corde", [])))

@@ -1,0 +1,34 @@
+Tab to Music
+Copyright 2026 Getaweb — https://getaweb.it
+
+Conceived and developed by Getaweb (https://getaweb.it).
+Any redistribution or derivative work must keep this NOTICE file and credit
+Getaweb (https://getaweb.it) as the original author, as required by section 4(d)
+of the Apache License, Version 2.0.
+
+-------------------------------------------------------------------------------
+Third-party components bundled in this repository
+-------------------------------------------------------------------------------
+
+alphaTab 1.8.4 (tablatura/pwa/alphatab/alphaTab*.js, *.mjs)
+  Copyright Daniel Kuschny and Contributors
+  Mozilla Public License 2.0 — https://www.mozilla.org/MPL/2.0/
+  Source: https://github.com/CoderLine/alphaTab (unmodified)
+
+Bravura font (tablatura/pwa/alphatab/font/)
+  Copyright Steinberg Media Technologies GmbH
+  SIL Open Font License 1.1 — see tablatura/pwa/alphatab/font/Bravura-OFL.txt
+
+-------------------------------------------------------------------------------
+Third-party libraries installed separately (requirements.txt), not bundled
+-------------------------------------------------------------------------------
+
+Demucs (MIT), Basic Pitch (Apache-2.0), faster-whisper (MIT), librosa (ISC),
+NumPy (BSD), PyGuitarPro (LGPL-3.0), tinytag (MIT), soundfile (BSD).
+
+Online services used at runtime: LRCLIB (https://lrclib.net) for synced lyrics,
+the iTunes Search API for missing album covers.
+
+Guitar Pro is a trademark of Arobas Music. This project is not affiliated with
+Arobas Music, Songsterr, Soundslice or Ultimate Guitar. No tablature, music or
+audio is distributed with this project: users bring their own files.
