@@ -363,7 +363,12 @@ class Risponditore(BaseHTTPRequestHandler):
             return self.json(libreria.artisti(indice_musica()))
         if percorso == "/api/musica/canzoni":
             canzoni = libreria.canzoni(indice_musica(), domanda.get("chiave", ""))
-            return self.json([c | {"fatta": id_fatta(c["percorso"])} for c in canzoni])
+            return self.json([c | {"fatta": id_fatta(c["percorso"]),
+                                   "tab": guitarpro.ha_tablatura(MUSICA, c["artista"], c["titolo"])} for c in canzoni])
+        if percorso == "/api/musica/cerca":
+            trovate = libreria.cerca(indice_musica(), domanda.get("q", ""))
+            return self.json([c | {"fatta": id_fatta(c["percorso"]),
+                                   "tab": guitarpro.ha_tablatura(MUSICA, c["artista"], c["titolo"])} for c in trovate])
         if percorso == "/libreria/disco":
             return self.manda(Path(__file__).with_name("disco.html").read_bytes(), "text/html; charset=utf-8")
         if percorso == "/disco/audio":
@@ -399,16 +404,10 @@ class Risponditore(BaseHTTPRequestHandler):
             if immagine:
                 return self.manda(immagine.read_bytes(), mimetypes.guess_type(immagine.name)[0] or "image/jpeg",
                                   altre={"Cache-Control": "max-age=3600"})
+            interna = libreria.copertina_interna(p) if p else None
+            if interna:
+                return self.manda(interna[0], interna[1], altre={"Cache-Control": "max-age=3600"})
             return self.manda(b"", "image/png", 404)
-        if percorso == "/api/suoni":
-            tuoi = sorted(p for p in MUSICA.glob("*.sf[23]") if p.is_file())
-            if tuoi:
-                return self.json({"url": "/suoni/" + urllib.parse.quote(tuoi[0].name), "nome": tuoi[0].stem})
-            return self.json({"url": "/pwa/alphatab/soundfont/MuseScore_General.sf3", "nome": "MuseScore General"})
-        if percorso.startswith("/suoni/"):
-            file = MUSICA / Path(percorso).name
-            if file.suffix.lower() in (".sf2", ".sf3") and file.is_file():
-                return self.file_a_pezzi(file)
         if percorso == "/api/testo":
             return self.json(self.testo_online(domanda.get("id", "")))
         if percorso == "/api/sincronia":

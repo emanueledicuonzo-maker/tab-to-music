@@ -213,6 +213,28 @@ def canzoni_di(musica: Path, artista: str) -> list[dict]:
     return sorted(per_titolo.values(), key=lambda v: v["titolo"].lower())
 
 
+@lru_cache(maxsize=2)
+def _per_titolo(musica: Path) -> dict[str, list[set[str]]]:
+    """titolo semplificato → le parole degli artisti che lo hanno: per sapere al volo se c'è una tab."""
+    indice: dict[str, list[set[str]]] = {}
+    for archivio in archivi(musica):
+        for nome, artista, titolo in elenco(archivio):
+            t = re.sub(r"\s+\d+$", "", titolo)
+            indice.setdefault(t, []).append(set(artista.split()))
+    return indice
+
+
+def ha_tablatura(musica: Path, artista: str, titolo: str) -> bool:
+    """Veloce: c'è negli archivi una tablatura con questo titolo e un artista compatibile?"""
+    indice = _per_titolo(musica)
+    parole = set(_semplice(artista.replace(",", " ")).split())
+    for t in {_semplice(titolo)} | {_semplice(x) for x in _titoli_possibili(titolo)}:
+        for artisti_di in indice.get(t, []):
+            if not parole or parole & artisti_di:
+                return True
+    return False
+
+
 def leggi(musica: Path, archivio: str, nome: str) -> bytes:
     zip_ = next(a for a in archivi(musica) if a.name == archivio)
     return _leggi(zip_, nome)

@@ -78,6 +78,49 @@
   .voce.aperta { color: var(--acceso); font-weight: 700; }
   .percorso { display: flex; gap: 6px; flex: 1; }
   .percorso input { flex: 1; min-width: 0; }
+  #dMusica { width: min(1500px, 96vw); height: 92vh; max-height: 92vh; }
+  #dMusica[open] { display: block; }
+  .lib { display: grid; grid-template-columns: 300px 1fr; height: 100%; position: relative; }
+  .libChiudi { position: absolute; top: 10px; right: 12px; z-index: 3; }
+  .libLato { border-right: 1px solid var(--bordo); display: flex; flex-direction: column; min-height: 0; background: #ffffff04; }
+  .libCerca { padding: 16px; border-bottom: 1px solid var(--bordo); }
+  .libCerca input { width: 100%; padding: 10px 14px; font-size: 15px; }
+  #artistiMusica { overflow: auto; padding: 8px; flex: 1; }
+  #artistiMusica .artista { padding: 8px 12px; }
+  #artistiMusica .artista small { background: #ffffff10; border-radius: 999px; padding: 0 8px; }
+  .libCorpo { overflow: auto; padding: 0 0 40px; min-height: 0; }
+  .libVuoto { display: grid; place-content: center; height: 100%; text-align: center; color: var(--tenue); gap: 6px; }
+  .libVuoto b { font-size: 26px; color: var(--testo); }
+  .libTesta { position: relative; padding: 46px 36px 26px; overflow: hidden; border-bottom: 1px solid var(--bordo); }
+  .libTesta .sfondo { position: absolute; inset: -40px; background-size: cover; background-position: center; filter: blur(60px) saturate(1.5);
+                      opacity: .35; z-index: 0; }
+  .libTesta > *:not(.sfondo) { position: relative; z-index: 1; }
+  .libTesta .tipo { font-size: 12px; letter-spacing: .2em; text-transform: uppercase; color: var(--tenue); }
+  .libTesta h2 { font-size: clamp(30px, 4vw, 56px); margin: 6px 0 8px; font-weight: 900; letter-spacing: -.02em;
+                 background: linear-gradient(90deg, #fff, #ffd38a 60%, #ff9bc0); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .libTesta .numeri { color: var(--tenue); display: flex; gap: 18px; flex-wrap: wrap; }
+  .libTesta .numeri b { color: var(--testo); }
+  .disco { display: grid; grid-template-columns: 190px 1fr; gap: 28px; padding: 28px 36px 8px; }
+  .disco .cop { width: 190px; height: 190px; border-radius: 12px; object-fit: cover; background: linear-gradient(135deg, #ffb02033, #ff3d8133, #2de2e633);
+                box-shadow: 0 18px 50px #000a, 0 0 0 1px #ffffff14; position: sticky; top: 20px; }
+  .disco .cop.vuota { display: grid; place-content: center; font-size: 54px; }
+  .disco h3 { margin: 4px 0 2px; font-size: 22px; }
+  .disco .sotto { color: var(--tenue); font-size: 13px; margin-bottom: 12px; }
+  .brani { width: 100%; border-collapse: collapse; }
+  .brani tr { cursor: pointer; }
+  .brani td { padding: 9px 10px; border-bottom: 1px solid #ffffff0a; }
+  .brani tr:hover td { background: #ffffff08; }
+  .brani tr:hover .num span { display: none; }
+  .brani tr:hover .num::before { content: "▶"; color: var(--acceso); }
+  .brani .num { width: 40px; color: var(--tenue); text-align: right; font-variant-numeric: tabular-nums; }
+  .brani .tit { font-weight: 600; }
+  .brani .tit small { display: block; font-weight: 400; color: var(--tenue); font-size: 12px; }
+  .brani .dur { width: 70px; text-align: right; color: var(--tenue); font-variant-numeric: tabular-nums; }
+  .brani .tag { width: 190px; text-align: right; white-space: nowrap; }
+  .eti { display: inline-block; font-size: 11px; font-weight: 800; letter-spacing: .06em; padding: 2px 8px; border-radius: 999px; margin-left: 4px; }
+  .eti.tab { color: var(--ciano); border: 1px solid #2de2e666; background: #2de2e612; }
+  .eti.tracce { color: #6bffa0; border: 1px solid #6bffa066; background: #6bffa012; }
+  .eti.no { color: var(--tenue); border: 1px solid var(--bordo); }
   .libreria { display: grid; grid-template-columns: 260px 1fr; gap: 14px; min-height: 60vh; }
   #artisti { overflow: auto; max-height: 66vh; border-right: 1px solid var(--bordo); padding-right: 8px; }
   #canzoniArtista { overflow: auto; max-height: 66vh; }
@@ -120,10 +163,13 @@
 </main>
 
 <dialog id="dMusica">
-  <div class="testa"><h2>Libreria</h2><input type="search" id="cercaMusica" placeholder="Cerca un artista…"><button class="chiudi" aria-label="Chiudi">×</button></div>
-  <div class="corpo libreria">
-    <div id="artistiMusica"></div>
-    <div id="canzoniMusica"><p style="color:var(--tenue)">Scegli un artista: la sua musica, con la tablatura sincronizzata se c'è.</p></div>
+  <div class="lib">
+    <aside class="libLato">
+      <div class="libCerca"><input type="search" id="cercaMusica" placeholder="Artista, canzone o album…"></div>
+      <div id="artistiMusica"></div>
+    </aside>
+    <section class="libCorpo" id="canzoniMusica"></section>
+    <button class="chiudi libChiudi" aria-label="Chiudi">×</button>
   </div>
 </dialog>
 
@@ -247,11 +293,19 @@ $("bSchede").onclick = () => {
 };
 
 // ---------------------------------------------------------------- Libreria: la tua musica
-let artistiTutti = [];
+let artistiTutti = [], cercaMusicaTimer;
+const durata = s => s ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}` : "";
+const durataLunga = s => s >= 3600 ? `${Math.floor(s / 3600)} h ${Math.round(s % 3600 / 60)} min` : `${Math.round(s / 60)} min`;
+const copertinaDi = percorso => "/api/disco/copertina?percorso=" + encodeURIComponent(percorso);
+
 async function mostraMusica() {
   $("dMusica").showModal();
   $("cercaMusica").focus();
-  if (!artistiTutti.length) { artistiTutti = await api("/api/musica/artisti"); disegnaArtistiMusica(""); }
+  if (!artistiTutti.length) {
+    artistiTutti = await api("/api/musica/artisti");
+    disegnaArtistiMusica("");
+    $("canzoniMusica").innerHTML = `<div class="libVuoto"><b>La tua musica</b><span>${artistiTutti.reduce((n, a) => n + a.quante, 0)} canzoni di ${artistiTutti.length} artisti.</span><span>Scegli un artista, o cerca una canzone.</span></div>`;
+  }
 }
 function disegnaArtistiMusica(filtro) {
   const f = filtro.toLowerCase(), el = $("artistiMusica");
@@ -265,26 +319,71 @@ function disegnaArtistiMusica(filtro) {
     el.append(b);
   }
 }
+function riga(c, conArtista) {
+  const r = document.createElement("tr");
+  r.innerHTML = `<td class="num"><span></span></td><td class="tit"><span></span><small></small></td><td class="tag"></td><td class="dur"></td>`;
+  r.querySelector(".num span").textContent = c.traccia ?? "";
+  r.querySelector(".tit span").textContent = c.titolo;
+  r.querySelector(".tit small").textContent = conArtista ? `${c.artista} · ${c.album}` : "";
+  r.querySelector(".dur").textContent = durata(c.durata);
+  const tag = r.querySelector(".tag");
+  tag.innerHTML = (c.tab ? `<span class="eti tab" title="C'è la tablatura Guitar Pro: si sincronizza da sola">TAB</span>` : `<span class="eti no" title="Tablatura non trovata negli archivi: puoi caricarla tu o usare Importa">senza tab</span>`)
+    + (c.fatta ? `<span class="eti tracce" title="Le tracce del disco sono già separate: c'è il mixer">TRACCE ✓</span>` : "");
+  r.onclick = () => apriDisco(c.percorso, `${c.artista} — ${c.titolo}`);
+  return r;
+}
 async function disegnaCanzoniMusica(a) {
   const el = $("canzoniMusica");
-  el.innerHTML = `<p style="color:var(--tenue)">Carico…</p>`;
+  el.innerHTML = `<div class="libVuoto"><span>Carico…</span></div>`;
   const canzoni = await api("/api/musica/canzoni?chiave=" + encodeURIComponent(a.chiave));
-  el.textContent = "";
-  let album = null;
+  const album = [];
   for (const c of canzoni) {
-    if (c.album !== album) {
-      album = c.album;
-      const t = document.createElement("div"); t.className = "album"; t.textContent = album; el.append(t);
-    }
-    const r = document.createElement("div");
-    r.className = "canzoneGP";
-    r.style.cursor = "pointer";
-    r.innerHTML = `<span class="titolo"></span><small style="color:var(--tenue)"></small>`;
-    r.querySelector(".titolo").textContent = c.titolo;
-    r.querySelector("small").textContent = c.fatta ? "tracce separate ✓" : "";
-    r.onclick = () => apriDisco(c.percorso, `${c.artista} — ${c.titolo}`);
-    el.append(r);
+    let g = album.find(x => x.nome === c.album);
+    if (!g) album.push(g = { nome: c.album, anno: c.anno, brani: [] });
+    g.brani.push(c);
   }
+  const totale = canzoni.reduce((n, c) => n + (c.durata || 0), 0);
+  const conTab = canzoni.filter(c => c.tab).length;
+  el.textContent = "";
+  const testa = document.createElement("div");
+  testa.className = "libTesta";
+  testa.innerHTML = `<div class="sfondo"></div><div class="tipo">Artista</div><h2></h2>
+    <div class="numeri"><span><b>${canzoni.length}</b> canzoni</span><span><b>${album.length}</b> album</span><span><b>${durataLunga(totale)}</b></span><span><b>${conTab}</b> con la tablatura</span></div>`;
+  testa.querySelector("h2").textContent = a.artista;
+  testa.querySelector(".sfondo").style.backgroundImage = `url('${copertinaDi(canzoni[0].percorso)}')`;
+  el.append(testa);
+  for (const g of album) {
+    const blocco = document.createElement("div");
+    blocco.className = "disco";
+    blocco.innerHTML = `<div><img class="cop" alt=""></div><div><div class="tipo" style="font-size:12px;letter-spacing:.18em;color:var(--tenue);text-transform:uppercase">Album</div><h3></h3><div class="sotto"></div><table class="brani"></table></div>`;
+    blocco.querySelector("h3").textContent = g.nome;
+    blocco.querySelector(".sotto").textContent = [g.anno, `${g.brani.length} ${g.brani.length === 1 ? "canzone" : "canzoni"}`,
+      durataLunga(g.brani.reduce((n, c) => n + (c.durata || 0), 0))].filter(Boolean).join(" · ");
+    const img = blocco.querySelector(".cop");
+    img.src = copertinaDi(g.brani[0].percorso);
+    img.onerror = () => { const v = document.createElement("div"); v.className = "cop vuota"; v.textContent = "💿"; img.replaceWith(v); };
+    const tabella = blocco.querySelector(".brani");
+    for (const c of g.brani) tabella.append(riga(c, false));
+    el.append(blocco);
+  }
+  el.scrollTop = 0;
+}
+async function cercaCanzoni(q) {
+  const el = $("canzoniMusica");
+  const trovate = await api("/api/musica/cerca?q=" + encodeURIComponent(q));
+  el.textContent = "";
+  const testa = document.createElement("div");
+  testa.className = "libTesta";
+  testa.innerHTML = `<div class="tipo">Ricerca</div><h2></h2><div class="numeri"><span><b>${trovate.length}</b> canzoni trovate</span></div>`;
+  testa.querySelector("h2").textContent = `«${q}»`;
+  el.append(testa);
+  const blocco = document.createElement("div");
+  blocco.style.padding = "16px 36px";
+  const tabella = document.createElement("table");
+  tabella.className = "brani";
+  for (const c of trovate) tabella.append(riga(c, true));
+  blocco.append(tabella);
+  el.append(blocco);
 }
 function apriDisco(percorso, titolo) {
   aperta = null;
@@ -294,7 +393,12 @@ function apriDisco(percorso, titolo) {
   try { localStorage.setItem("ultimoDisco", JSON.stringify({ percorso, titolo })); } catch {}
   $("dMusica").close();
 }
-$("cercaMusica").oninput = e => disegnaArtistiMusica(e.target.value);
+$("cercaMusica").oninput = e => {
+  const q = e.target.value;
+  disegnaArtistiMusica(q);
+  clearTimeout(cercaMusicaTimer);
+  if (q.trim().length >= 3) cercaMusicaTimer = setTimeout(() => cercaCanzoni(q), 300);
+};
 $("bLaMusica").onclick = mostraMusica;
 
 // ---------------------------------------------------------------- Tablature
