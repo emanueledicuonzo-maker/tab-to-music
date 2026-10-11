@@ -24,7 +24,7 @@ from dataclasses import asdict, dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import copertina
+from . import copertina, guitarpro
 from .strumenti import STRUMENTI
 from .visore import pagina
 
@@ -187,9 +187,12 @@ def pagina_di(cartella: Path) -> str:
     tracce = [{"nome": f.stem, "file": urllib.parse.quote(f.name)} for f in sorted(cartella.glob("*.wav"))]
     nome = next((s.nome for s in STRUMENTI.values() if s.nome == tab.get("strumento")), tab.get("strumento", ""))
     immagine = copertina.di(cartella.parent)
+    gp = guitarpro.di(cartella)
     return pagina(cartella.name.replace("_", " "), nome, round(bpm, 2), tab, tracce,
                   copertina=f"../{urllib.parse.quote(immagine.name)}" if immagine else "",
-                  album=cartella.parent.name)
+                  album=cartella.parent.name,
+                  guitarpro=urllib.parse.quote(gp.name) if gp else "",
+                  id_canzone=f"{cartella.parent.name}/{cartella.name}")
 
 
 def sfoglia(dove: str | None) -> dict:
@@ -253,11 +256,22 @@ class Risponditore(BaseHTTPRequestHandler):
         if percorso.startswith("/tab/"):
             return self.da_tab(percorso[len("/tab/"):])
         if percorso == "/sw.js" or percorso.startswith("/pwa/"):
-            file = PWA / Path(percorso).name
-            if file.is_file():
-                tipo = {".js": "text/javascript", ".webmanifest": "application/manifest+json", ".png": "image/png"}[file.suffix]
-                altre = {"Service-Worker-Allowed": "/"} if file.suffix == ".js" else None
+            relativo = "sw.js" if percorso == "/sw.js" else percorso[len("/pwa/"):]
+            file = (PWA / relativo).resolve()
+            if PWA.resolve() in file.parents and file.is_file():
+                tipo = {".js": "text/javascript", ".webmanifest": "application/manifest+json", ".png": "image/png",
+                        ".woff2": "font/woff2", ".woff": "font/woff", ".sf2": "application/octet-stream",
+                        ".txt": "text/plain"}.get(file.suffix, "application/octet-stream")
+                altre = {"Service-Worker-Allowed": "/"} if file.name == "sw.js" else {"Cache-Control": "max-age=86400"}
                 return self.manda(file.read_bytes(), tipo, altre=altre)
+        if percorso == "/api/gp/cerca":
+            cartella = self.canzone(domanda.get("id", ""))
+            if cartella is None:
+                return self.json([], 404)
+            return self.json(guitarpro.cerca(cartella.name, cartella.parent.name, MUSICA))
+        if percorso == "/api/sincronia":
+            cartella = self.canzone(domanda.get("id", ""))
+            return self.json(guitarpro.leggi_sincronia(cartella) if cartella else {})
         self.manda(b"non c'e'", "text/plain", 404)
 
     do_HEAD = do_GET
@@ -266,18 +280,53 @@ class Risponditore(BaseHTTPRequestHandler):
         global ultimo_contatto
         ultimo_contatto = time.monotonic()
         lunghezza = int(self.headers.get("Content-Length", 0))
-        dati = json.loads(self.rfile.read(lunghezza) or b"{}")
+        dati_grezzi = self.rfile.read(lunghezza)
+        try:
+            dati = json.loads(dati_grezzi or b"{}")
+        except ValueError:
+            dati = {}
         if self.path == "/api/importa":
             salva_stato(strumento=dati["strumento"], testo=dati["testo"], lingua=dati["lingua"])
             quante = accoda(dati["percorsi"], dati["strumento"], dati["testo"], dati["lingua"])
             return self.json({"accodate": quante})
         if self.path == "/api/preferenze":
             return self.json(salva_stato(**dati))
+        url = urllib.parse.urlsplit(self.path)
+        domanda = dict(urllib.parse.parse_qsl(url.query))
+        if url.path == "/api/gp/carica":
+            # Il corpo è il file stesso, così si caricano anche file grossi senza moduli.
+            cartella = self.canzone(domanda.get("id", ""))
+            if cartella is None:
+                return self.json({"errore": "canzone sconosciuta"}, 404)
+            try:
+                guitarpro.metti(cartella, dati_grezzi, Path(domanda.get("nome", "")).suffix)
+            except ValueError as errore:
+                return self.json({"errore": str(errore)}, 400)
+            return self.json({"ok": True})
+        if url.path == "/api/gp/scegli":
+            cartella = self.canzone(dati.get("id", ""))
+            if cartella is None:
+                return self.json({"errore": "canzone sconosciuta"}, 404)
+            guitarpro.estrai(cartella, MUSICA, dati["archivio"], dati["nome"])
+            return self.json({"ok": True})
+        if url.path == "/api/sincronia":
+            cartella = self.canzone(dati.get("id", ""))
+            if cartella is None:
+                return self.json({"errore": "canzone sconosciuta"}, 404)
+            guitarpro.salva_sincronia(cartella, dati.get("sincronia", {}))
+            return self.json({"ok": True})
         if self.path == "/api/svuota":
             with serratura:
                 coda[:] = [l for l in coda if l.stato in ("in attesa", "in lavorazione")]
             return self.json({})
         self.manda(b"non c'e'", "text/plain", 404)
+
+    def canzone(self, id_: str) -> Path | None:
+        """La cartella di una canzone dal suo id «album/canzone», solo dentro tab."""
+        cartella = (TAB / id_).resolve()
+        if TAB.resolve() in cartella.parents and (cartella / "leggio.json").is_file():
+            return cartella
+        return None
 
     def da_tab(self, relativo: str):
         file = (TAB / relativo).resolve()

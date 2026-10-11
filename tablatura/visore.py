@@ -60,6 +60,7 @@ def dati(
     return {
         "strumento": strumento.nome,
         "corde": [NOMI_CORDE[n % 12] for n in strumento.corde],
+        "cordeMidi": list(strumento.corde),
         "celle": len(battute) * per_battuta,
         "perBattuta": per_battuta,
         "durataCella": round(cella, 4),
@@ -191,6 +192,26 @@ PAGINA = """<!doctype html>
   #legenda b { color: var(--ciano); font-family: ui-monospace, monospace; margin-right: 4px; }
   .accordo.ora { color: #000; background: var(--acceso); border-radius: 4px; box-shadow: 0 0 14px var(--acceso); }
 
+  #gp { display: none; }
+  body.sologp #gp { display: block; }
+  body.sologp #tab, body.sologp #canzoniere, body.sologp #legenda, body.sologp #diagrammi, body.sologp #bGiro { display: none !important; }
+  .gpBarra { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .gpBarra select { font: inherit; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--bordo); background: #ffffff08; color: inherit; }
+  .gpBarra select option { background: #111; }
+  #gpStato { color: var(--tenue); font-size: 13px; }
+  #alphaTab { background: #0b0b14; border: 1px solid var(--bordo); border-radius: 14px; padding: 10px; min-height: 300px; }
+  #alphaTab .at-cursor-bar { background: #ffb02022; }
+  #alphaTab .at-cursor-beat { background: var(--acceso); width: 3px; box-shadow: 0 0 12px var(--acceso); }
+  #alphaTab .at-highlight * { fill: var(--acceso); stroke: var(--acceso); }
+  #bGP { margin: 0 0 14px 10px; vertical-align: top; }
+  #dGP { border: 1px solid var(--bordo); border-radius: 16px; background: #0d0d16f2; color: inherit; width: min(720px, 94vw); padding: 0; }
+  #dGP::backdrop { background: #000a; }
+  .gpTesta { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--bordo); }
+  .gpTesta .chiudi { border: 0; background: transparent; font-size: 22px; color: var(--tenue); }
+  #gpElenco { display: flex; flex-direction: column; gap: 6px; padding: 12px 18px; max-height: 50vh; overflow: auto; }
+  .gpVoce { text-align: left; }
+  .gpCarica { display: block; padding: 12px 18px 18px; color: var(--tenue); font-size: 13px; }
+  .gpCarica input { display: block; margin-top: 8px; color: var(--testo); }
   #canzoniere { display: none; font: 20px/1.55 ui-monospace, "Ubuntu Mono", monospace; }
   body.soloaccordi #tab { display: none; }
   body.soloaccordi #canzoniere { display: block; }
@@ -232,16 +253,35 @@ PAGINA = """<!doctype html>
 
 <div id="tracce"></div>
 <div id="vista" hidden>
-  <button data-vista="tab" class="attivo">Tablatura</button><button data-vista="accordi">Accordi e testo</button>
+  <button data-vista="tab" class="attivo">Tablatura</button><button data-vista="accordi">Accordi e testo</button><button data-vista="gp" id="vistaGP" hidden>Guitar Pro</button>
 </div>
+<button id="bGP" title="Collega una tablatura Guitar Pro a questa canzone">Guitar Pro…</button>
 <button id="bGiro" hidden title="Le ripetizioni del giro rese uguali, o la tablatura come l'ha sentita il programma">Giro pulito</button>
 <div id="diagrammi"></div>
 <div id="legenda" hidden></div>
 <div id="tab"></div>
 <div id="canzoniere"></div>
+<section id="gp">
+  <div class="gpBarra">
+    <label>Traccia <select id="gpTraccia"></select></label>
+    <button id="gpPrima" title="Tutta la tablatura un decimo di secondo prima">−0,1 s</button>
+    <button id="gpDopo" title="Tutta la tablatura un decimo di secondo dopo">+0,1 s</button>
+    <button id="gpRifai" title="Rifà la sincronia automatica, buttando le correzioni">Risincronizza</button>
+    <span id="gpStato"></span>
+  </div>
+  <div id="alphaTab"></div>
+</section>
+<dialog id="dGP">
+  <div class="gpTesta"><b>Tablatura Guitar Pro</b><button class="chiudi" aria-label="Chiudi">×</button></div>
+  <div id="gpElenco"></div>
+  <label class="gpCarica">…oppure carica un file scaricato da te (.gp, .gpx, .gp5, .gp4, .gp3)
+    <input type="file" id="gpFile" accept=".gp,.gpx,.gp5,.gp4,.gp3,.gtp"></label>
+</dialog>
 
 <script>
 const DATI = __DATI__;
+const GP = __GUITARPRO__;
+let VISTA_RICORDATA = null;
 const TRACCE = __TRACCE__;
 
 const tracce = TRACCE.map(t => {
@@ -382,11 +422,22 @@ function diagramma(forma) {
     diagrammiEl.set(nome, box);
   }
   if (!accordi.length) contenitore.remove();
-  else {
-    const vista = document.getElementById("vista");
-    vista.hidden = false;
-    const scegliVista = nome => {
+}
+
+// Le viste: la nostra tablatura, accordi e testo, e Guitar Pro quando c'è.
+let scegliVista = () => {};
+{
+  const vista = document.getElementById("vista");
+  const vistaAccordi = vista.querySelector('[data-vista="accordi"]');
+  vistaAccordi.hidden = !accordi.length && !(DATI.parole || []).length;
+  document.getElementById("vistaGP").hidden = !GP.file;
+  vista.hidden = vistaAccordi.hidden && !GP.file;
+  {
+    scegliVista = nome => {
+      if (nome === "gp" && !GP.file) nome = "tab";
       document.body.classList.toggle("soloaccordi", nome === "accordi");
+      document.body.classList.toggle("sologp", nome === "gp");
+      if (nome === "gp") apriGP();
       for (const x of vista.querySelectorAll("button")) x.classList.toggle("attivo", x.dataset.vista === nome);
       try { localStorage.setItem("vista", nome); } catch {}
     };
@@ -394,7 +445,9 @@ function diagramma(forma) {
     // La vista scelta l'ultima volta vale anche per la canzone dopo.
     let ricordata = location.hash === "#accordi" ? "accordi" : null;
     try { ricordata ??= localStorage.getItem("vista"); } catch {}
-    if (ricordata === "accordi") scegliVista("accordi");
+    // «gp» si rimette alla fine, quando la parte Guitar Pro è pronta.
+    if (ricordata === "accordi") scegliVista(ricordata);
+    VISTA_RICORDATA = ricordata;
   }
 }
 
@@ -757,8 +810,8 @@ function orologio(s) {
 }
 
 via.onclick = () => {
-  if (guida.paused) { accendiAudio(); audio.forEach(a => { a.currentTime = guida.currentTime; a.play(); }); via.textContent = "⏸"; }
-  else { audio.forEach(a => a.pause()); via.textContent = "▶"; }
+  if (guida.paused) { accendiAudio(); audio.forEach(a => { a.currentTime = guida.currentTime; a.play(); }); via.textContent = "⏸"; at?.play(); }
+  else { audio.forEach(a => a.pause()); via.textContent = "▶"; at?.pause(); }
 };
 
 // Rallentare senza cambiare intonazione: il browser tiene l'altezza delle note.
@@ -885,6 +938,8 @@ function disegnaSpettro() {
 
 function giro() {
   const ora = guida.currentTime;
+  // La tablatura Guitar Pro segue il nostro audio, non il contrario.
+  try { at?.player?.output?.updatePosition?.(ora * 1000); } catch {}
   tracce.forEach(disegnaMetro);
   const bassi = guida.paused ? 0 : disegnaSpettro();
   if (guida.paused && analisiTotale) disegnaSpettro();
@@ -926,6 +981,227 @@ requestAnimationFrame(giro);
 addEventListener("keydown", e => {
   if (e.code === "Space" && !/INPUT|BUTTON/.test(document.activeElement.tagName)) { e.preventDefault(); via.click(); }
 });
+
+// ---------------------------------------------------------------- Guitar Pro
+// La tablatura vera, da un file Guitar Pro, disegnata da alphaTab e fatta
+// scorrere sulle nostre tracce separate. Il file ha un tempo suo, il disco un
+// altro: la sincronia dice a che istante del disco comincia ogni battuta, e
+// la si trova confrontando le note del file con quelle che abbiamo sentito.
+let at = null, gpScore = null, gpTraccia = 0, gpTempi = [], gpPunti = [];
+const statoGP = document.getElementById("gpStato");
+
+function caricaScript(src) {
+  return new Promise((ok, ko) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = ko; document.head.append(s); });
+}
+
+// Le battute nell'ordine in cui si suonano (con i ritornelli), e quando cadono
+// nel tempo del file: millisecondi dall'inizio, al tempo scritto.
+function tempiDelFile(score) {
+  const fuori = [];
+  let bpm = score.tempo || 120, t = 0, i = 0, inizioRip = 0;
+  const giri = new Map();
+  while (i < score.masterBars.length && fuori.length < 5000) {
+    const mb = score.masterBars[i];
+    if (mb.isRepeatStart) inizioRip = i;
+    for (const a of mb.tempoAutomations || []) bpm = a.value || bpm;
+    const durata = mb.calculateDuration() / 960 * 60000 / bpm;
+    const occ = fuori.filter(x => x.bar === i).length;
+    fuori.push({ bar: i, occ, inizio: t, durata, bpm });
+    t += durata;
+    if (mb.repeatCount > 0) {
+      const fatti = giri.get(i) || 0;
+      if (fatti < mb.repeatCount - 1) { giri.set(i, fatti + 1); i = inizioRip; continue; }
+      giri.delete(i);
+    }
+    i++;
+  }
+  return fuori;
+}
+
+// Ogni quanto si confronta: un decimo di secondo.
+const PASSO_SYNC = 100;
+function suoniDelFile(traccia) {
+  // La nota che suona in ogni decimo di secondo, nel tempo del file (classe di altezza, -1 = niente).
+  const fine = gpTempi.length ? gpTempi.at(-1).inizio + gpTempi.at(-1).durata : 0;
+  const quadri = new Int8Array(Math.ceil(fine / PASSO_SYNC) + 1).fill(-1);
+  const staff = traccia.staves[0];
+  for (const o of gpTempi) {
+    const bar = staff.bars[o.bar];
+    if (!bar) continue;
+    const durataBar = gpScore.masterBars[o.bar].calculateDuration();
+    for (const voce of bar.voices) for (const beat of voce.beats) {
+      if (beat.isRest || !beat.notes.length) continue;
+      const nota = beat.notes.reduce((a, b) => (a.realValue < b.realValue ? a : b));
+      const da = o.inizio + beat.playbackStart / durataBar * o.durata;
+      const a = da + beat.playbackDuration / durataBar * o.durata;
+      for (let q = Math.floor(da / PASSO_SYNC); q < Math.min(quadri.length, Math.ceil(a / PASSO_SYNC)); q++) quadri[q] = nota.realValue % 12;
+    }
+  }
+  return quadri;
+}
+function suoniDelDisco() {
+  const corde = DATI.cordeMidi || [];
+  const fine = (guida.duration || 0) * 1000;
+  const quadri = new Int8Array(Math.ceil(fine / PASSO_SYNC) + 1).fill(-1);
+  const note = [...DATI.note].sort((a, b) => a.quando - b.quando);
+  note.forEach((n, k) => {
+    if (corde[n.corda] === undefined) return;
+    const da = n.quando * 1000, a = Math.min(da + 500, k + 1 < note.length ? note[k + 1].quando * 1000 : da + 500);
+    for (let q = Math.floor(da / PASSO_SYNC); q < Math.min(quadri.length, Math.ceil(a / PASSO_SYNC)); q++) quadri[q] = (corde[n.corda] + n.tasto) % 12;
+  });
+  return quadri;
+}
+
+// Allineamento dinamico (DTW) fra le due sequenze: restituisce, per ogni
+// decimo di secondo del file, il decimo di secondo del disco.
+function allinea(a, b) {
+  const N = a.length, M = b.length;
+  const costo = (x, y) => (x < 0 && y < 0 ? 0.2 : x < 0 || y < 0 ? 0.6 : x === y ? 0 : 1);
+  const da = new Uint8Array(N * M);
+  let prima = new Float32Array(M).fill(Infinity), ora = new Float32Array(M);
+  for (let i = 0; i < N; i++) {
+    for (let j = 0; j < M; j++) {
+      const c = costo(a[i], b[j]);
+      if (i === 0 && j === 0) { ora[j] = c; continue; }
+      const diag = i > 0 && j > 0 ? prima[j - 1] : Infinity;
+      const su = i > 0 ? prima[j] + 0.15 : Infinity;
+      const sx = j > 0 ? ora[j - 1] + 0.15 : Infinity;
+      if (diag <= su && diag <= sx) { ora[j] = diag + c; da[i * M + j] = 0; }
+      else if (su <= sx) { ora[j] = su + c; da[i * M + j] = 1; }
+      else { ora[j] = sx + c; da[i * M + j] = 2; }
+    }
+    [prima, ora] = [ora, prima];
+  }
+  const verso = new Int32Array(N);
+  let i = N - 1, j = M - 1;
+  while (i >= 0 && j >= 0) {
+    verso[i] = j;
+    const d = da[i * M + j];
+    if (i === 0 && j === 0) break;
+    if (d === 0) { i--; j--; } else if (d === 1) i--; else j--;
+  }
+  return verso;
+}
+
+function sincroniaAutomatica() {
+  const file = suoniDelFile(gpScore.tracks[gpTraccia]);
+  const disco = suoniDelDisco();
+  if (!file.length || !disco.length) return [];
+  // Il DTW costa N×M: oltre i 6000 decimi (10 minuti) si dimezza il dettaglio.
+  const verso = allinea(file, disco);
+  return gpTempi.map(o => ({
+    barIndex: o.bar, barOccurence: o.occ, barPosition: 0,
+    millisecondOffset: verso[Math.min(verso.length - 1, Math.round(o.inizio / PASSO_SYNC))] * PASSO_SYNC,
+  }));
+}
+
+function applicaPunti(punti, salva = true) {
+  gpPunti = punti;
+  gpScore.applyFlatSyncPoints(punti);
+  at.updateSyncPoints();
+  if (salva) fetch("/api/sincronia", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: GP.id, sincronia: { traccia: gpTraccia, punti } }) }).catch(() => {});
+}
+
+function tracciaDelBasso(score) {
+  const basso = /bass|basso/i;
+  const vuole = (DATI.strumento || "").includes("basso");
+  const indice = score.tracks.findIndex(t => vuole ? basso.test(t.name) || (t.staves[0].tuning || []).some(n => n < 32)
+                                                    : /guit|chit/i.test(t.name) && !basso.test(t.name));
+  return Math.max(0, indice);
+}
+
+async function apriGP() {
+  if (at || !GP.file) return;
+  statoGP.textContent = "Carico la tablatura…";
+  await caricaScript("/pwa/alphatab/alphaTab.min.js");
+  at = new alphaTab.AlphaTabApi(document.getElementById("alphaTab"), {
+    core: { file: GP.file, fontDirectory: "/pwa/alphatab/font/", scriptFile: "/pwa/alphatab/alphaTab.min.js", useWorkers: false },
+    display: { staveProfile: alphaTab.StaveProfile.Tab, resources: { mainGlyphColor: "#d9dcea", secondaryGlyphColor: "#9aa0b4",
+               staffLineColor: "#ffffff33", barSeparatorColor: "#ffffff44", scoreInfoColor: "#eef0f6" } },
+    player: { playerMode: alphaTab.PlayerMode.EnabledExternalMedia, enableCursor: true, enableAnimatedBeatCursor: true,
+              enableUserInteraction: true, scrollMode: alphaTab.ScrollMode.Continuous, scrollOffsetY: -180 },
+  });
+  at.playerReady.on(() => {
+    at.player.output.handler = {
+      get backingTrackDuration() { return (guida.duration || 0) * 1000; },
+      get playbackRate() { return guida.playbackRate; }, set playbackRate(v) {},
+      get masterVolume() { return 1; }, set masterVolume(v) {},
+      seekTo(ms) { audio.forEach(a => { a.currentTime = ms / 1000; }); },
+      play() { if (guida.paused) via.click(); },
+      pause() { if (!guida.paused) via.click(); },
+    };
+  });
+  at.scoreLoaded.on(async score => {
+    gpScore = score;
+    gpTempi = tempiDelFile(score);
+    const scelta = document.getElementById("gpTraccia");
+    scelta.textContent = "";
+    score.tracks.forEach((t, i) => scelta.append(new Option(t.name || `traccia ${i + 1}`, i)));
+    const salvata = await fetch("/api/sincronia?id=" + encodeURIComponent(GP.id)).then(r => r.json()).catch(() => ({}));
+    gpTraccia = salvata.traccia ?? tracciaDelBasso(score);
+    scelta.value = gpTraccia;
+    at.renderTracks([score.tracks[gpTraccia]]);
+    const pronto = () => {
+      if (salvata.punti && salvata.punti.length) { applicaPunti(salvata.punti, false); statoGP.textContent = "Sincronia salvata."; }
+      else { statoGP.textContent = "Sincronizzo con le note sentite…"; setTimeout(() => { applicaPunti(sincroniaAutomatica()); statoGP.textContent = "Sincronizzata in automatico. Se una battuta parte storta: falla suonare e cliccala nel momento giusto."; }, 30); }
+    };
+    if (guida.duration) pronto(); else guida.addEventListener("loadedmetadata", pronto, { once: true });
+  });
+  // Correzione a mano: mentre suona, un clic su una battuta dice «comincia adesso».
+  at.beatMouseDown.on(beat => {
+    if (!gpPunti.length || guida.paused) return;
+    const bar = beat.voice.bar.index, adesso = guida.currentTime * 1000;
+    let k = -1, distanza = Infinity;
+    gpPunti.forEach((p, i) => { if (p.barIndex === bar && Math.abs(p.millisecondOffset - adesso) < distanza) { k = i; distanza = Math.abs(p.millisecondOffset - adesso); } });
+    if (k < 0) return;
+    const delta = adesso - gpPunti[k].millisecondOffset;
+    applicaPunti(gpPunti.map((p, i) => (i >= k ? { ...p, millisecondOffset: Math.max(0, p.millisecondOffset + delta) } : p)));
+    statoGP.textContent = `Battuta ${bar + 1} agganciata a ${orologio(adesso / 1000)}.`;
+  });
+  document.getElementById("gpTraccia").onchange = e => {
+    gpTraccia = Number(e.target.value);
+    at.renderTracks([gpScore.tracks[gpTraccia]]);
+    applicaPunti(gpPunti);
+  };
+  document.getElementById("gpPrima").onclick = () => applicaPunti(gpPunti.map(p => ({ ...p, millisecondOffset: Math.max(0, p.millisecondOffset - 100) })));
+  document.getElementById("gpDopo").onclick = () => applicaPunti(gpPunti.map(p => ({ ...p, millisecondOffset: p.millisecondOffset + 100 })));
+  document.getElementById("gpRifai").onclick = () => { applicaPunti(sincroniaAutomatica()); statoGP.textContent = "Rifatta la sincronia automatica."; };
+}
+
+// Scegliere la tablatura: dall'archivio Guitar Pro, o un file scaricato da te.
+async function scegliGP() {
+  const d = document.getElementById("dGP");
+  const elenco = document.getElementById("gpElenco");
+  elenco.innerHTML = "<p>Cerco nell'archivio…</p>";
+  d.showModal();
+  const trovate = await fetch("/api/gp/cerca?id=" + encodeURIComponent(GP.id)).then(r => r.json()).catch(() => []);
+  elenco.textContent = "";
+  if (!trovate.length) elenco.innerHTML = "<p>Nell'archivio non c'è. Carica un file Guitar Pro scaricato da te.</p>";
+  for (const t of trovate) {
+    const r = document.createElement("button");
+    r.className = "gpVoce";
+    r.textContent = t.nome.split("/").slice(-2).join(" / ");
+    r.title = t.archivio + " · " + t.nome;
+    r.onclick = async () => {
+      r.disabled = true;
+      await fetch("/api/gp/scegli", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: GP.id, archivio: t.archivio, nome: t.nome }) });
+      try { localStorage.setItem("vista", "gp"); } catch {}
+      location.reload();
+    };
+    elenco.append(r);
+  }
+}
+document.getElementById("gpFile").onchange = async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  await fetch(`/api/gp/carica?id=${encodeURIComponent(GP.id)}&nome=${encodeURIComponent(f.name)}`, { method: "POST", body: await f.arrayBuffer() });
+  try { localStorage.setItem("vista", "gp"); } catch {}
+  location.reload();
+};
+document.getElementById("bGP").onclick = scegliGP;
+document.querySelector("#dGP .chiudi").onclick = () => document.getElementById("dGP").close();
+if (VISTA_RICORDATA === "gp" && GP.file) scegliVista("gp");
 </script>
 </html>
 """
@@ -943,11 +1219,13 @@ def accordatura(strumento: str, corde: list[str]) -> str:
 
 
 def pagina(
-    titolo: str, strumento: str, bpm: float, tab: dict, tracce: list[dict], copertina: str = "", album: str = ""
+    titolo: str, strumento: str, bpm: float, tab: dict, tracce: list[dict], copertina: str = "", album: str = "",
+    guitarpro: str = "", id_canzone: str = "",
 ) -> str:
     """La pagina di una canzone, come testo."""
     return (
-        PAGINA.replace("__ACCORDATURA__", accordatura(strumento, tab.get("corde", [])))
+        PAGINA.replace("__GUITARPRO__", json.dumps({"file": guitarpro, "id": id_canzone}))
+        .replace("__ACCORDATURA__", accordatura(strumento, tab.get("corde", [])))
         .replace("__COPERTINA__", html.escape(copertina, quote=True))
         .replace("__ALBUM__", html.escape(album))
         .replace("__TITOLO__", titolo)
