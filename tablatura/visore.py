@@ -175,6 +175,9 @@ PAGINA = """<!doctype html>
   .rigo { white-space: pre; padding: 12px 14px 8px; margin-bottom: 12px; border-radius: 14px; cursor: pointer; overflow-x: auto;
           border: 1px solid transparent; color: #b9bdd0; transition: background .2s, border-color .2s; }
   .rigo:hover { background: var(--pannello); }
+  .giri { font-size: 12px; color: var(--viola); margin-bottom: 2px; }
+  .giro.variazione { color: var(--rosa); }
+  #bGiro { margin: 0 0 14px 10px; vertical-align: top; }
   .rigo.ora { background: linear-gradient(90deg, #ffb02012, #ff3d810a); border-color: #ffb02044; color: var(--testo); }
   .parole { color: var(--tenue); margin-top: 3px; }
   .rigo.ora .parole { color: #dfe2ee; }
@@ -231,6 +234,7 @@ PAGINA = """<!doctype html>
 <div id="vista" hidden>
   <button data-vista="tab" class="attivo">Tablatura</button><button data-vista="accordi">Accordi e testo</button>
 </div>
+<button id="bGiro" hidden title="Le ripetizioni del giro rese uguali, o la tablatura come l'ha sentita il programma">Giro pulito</button>
 <div id="diagrammi"></div>
 <div id="legenda" hidden></div>
 <div id="tab"></div>
@@ -293,7 +297,9 @@ for (const t of tracce) {
 // stanno nella finestra, sopra ogni rigo gli accordi e sotto le parole
 // cantate in quel tratto, ognuna sopra o sotto la casella in cui cade. Il testo serve a sapere dove si è
 // dentro un giro che si ripete uguale per tutto il pezzo.
-const CELLA = 2;
+// La casella è larga abbastanza per il tasto più lungo col suo segno, più un
+// trattino: senza, 12 seguito da 9 si leggeva «129», e h2 seguito da 2 «h22».
+const CELLA = Math.min(4, 1 + Math.max(1, ...DATI.note.map(n => String(n.tasto).length + (n.segno || "").length)));
 const SPIEGA = { h: "legato in salita (hammer-on)", p: "legato in discesa (pull-off)", "/": "glissato in salita",
                  "\\\\": "glissato in discesa", b: "bending", "~": "vibrato", tr: "trillo" };
 const PREFISSO = 3;  // " G|"
@@ -302,7 +308,7 @@ const PB = DATI.perBattuta;
 const battuteTotali = Math.ceil(DATI.celle / PB);
 const partenza = DATI.partenza ??
   (DATI.note.length ? DATI.note[0].quando - DATI.note[0].cella * DATI.durataCella : 0);
-const notaIn = new Map(DATI.note.map(n => [`${n.corda}:${n.cella}`, n]));
+let notaIn = new Map(DATI.note.map(n => [`${n.corda}:${n.cella}`, n]));
 const cellaDi = quando => Math.max(0, Math.round((quando - partenza) / DATI.durataCella));
 let caselle = new Map();
 let righi = [];         // { el, da, a } in celle
@@ -402,6 +408,96 @@ function larghezzaCarattere() {
   return l || 8.4;
 }
 
+// ---------------------------------------------------------------- i giri
+// Il trascrittore sente ogni ripetizione del giro un po' diversa: una nota in
+// più qui, un ribattuto perso là. Il bassista invece suona quasi sempre lo
+// stesso giro. Si raggruppano le battute che si somigliano, si fa il «giro
+// medio» (in ogni punto della battuta la nota che c'è nella maggior parte
+// delle ripetizioni), e le battute vicine al giro medio diventano uguali a
+// lui. Quelle davvero diverse restano come sono: sono le variazioni.
+const SOMIGLIA = 0.6, NORMALIZZA = 0.7, MINIMO_GIRO = 3;
+const chiave = n => `${n.corda}:${n.tasto}`;
+
+function somiglianza(a, b) {
+  // a, b: Map(punto della battuta -> nota). Una nota vale se l'altra battuta
+  // ha la stessa nota nello stesso punto o in quello accanto.
+  if (!a.size || !b.size) return 0;
+  const usate = new Set();
+  let pari = 0;
+  for (const [punto, n] of a) {
+    for (const d of [0, -1, 1]) {
+      const m = b.get(punto + d);
+      if (m && !usate.has(punto + d) && chiave(m) === chiave(n)) { usate.add(punto + d); pari++; break; }
+    }
+  }
+  return pari / Math.max(a.size, b.size);
+}
+
+function trovaGiri(note) {
+  const battute = Array.from({ length: battuteTotali }, () => new Map());
+  for (const n of note) {
+    const b = Math.floor(n.cella / PB), punto = n.cella % PB;
+    if (!battute[b].has(punto)) battute[b].set(punto, n);
+  }
+  const gruppi = [];   // { modello, membri: [b] }
+  battute.forEach((m, b) => {
+    if (m.size < 2) return;
+    let migliore = null, punteggio = SOMIGLIA;
+    for (const g of gruppi) {
+      const s = somiglianza(m, g.modello);
+      if (s >= punteggio) { migliore = g; punteggio = s; }
+    }
+    if (migliore) migliore.membri.push(b);
+    else gruppi.push({ modello: m, membri: [b] });
+  });
+
+  const pulite = new Map(battute.map((m, b) => [b, m]));
+  const etichette = new Map();
+  let lettera = 0;
+  for (const g of gruppi.filter(g => g.membri.length >= MINIMO_GIRO)) {
+    // Il giro medio: in ogni punto vince la nota più frequente, o il silenzio.
+    const medio = new Map();
+    for (let punto = 0; punto < PB; punto++) {
+      const voti = new Map();
+      let vuoti = 0;
+      for (const b of g.membri) {
+        const n = battute[b].get(punto);
+        if (!n) { vuoti++; continue; }
+        const k = chiave(n);
+        voti.set(k, (voti.get(k) || { n, conta: 0 })), voti.get(k).conta++;
+      }
+      const primo = [...voti.values()].sort((x, y) => y.conta - x.conta)[0];
+      if (primo && primo.conta > vuoti) medio.set(punto, primo.n);
+    }
+    const nome = String.fromCharCode(65 + (lettera++ % 26));
+    for (const b of g.membri) {
+      const vicina = somiglianza(battute[b], medio) >= NORMALIZZA;
+      etichette.set(b, { nome, variazione: !vicina, volte: g.membri.length });
+      if (vicina) {
+        pulite.set(b, new Map([...medio].map(([punto, n]) => {
+          const cella = b * PB + punto;
+          return [punto, { corda: n.corda, tasto: n.tasto, cella, quando: +(partenza + cella * DATI.durataCella).toFixed(3) }];
+        })));
+      }
+    }
+  }
+  const tutte = [];
+  for (const m of pulite.values()) tutte.push(...m.values());
+  // Le note su altre corde nella stessa casella (accordi) restano dall'originale.
+  for (const n of note) {
+    const b = Math.floor(n.cella / PB);
+    if (pulite.get(b) === battute[b] && battute[b].get(n.cella % PB) !== n) tutte.push(n);
+  }
+  tutte.sort((x, y) => x.cella - y.cella || x.corda - y.corda);
+  return { note: tutte, etichette };
+}
+
+const GIRI = trovaGiri(DATI.note);
+let giroPulito = true;
+try { giroPulito = localStorage.getItem("giro") !== "sentito"; } catch {}
+let noteAttive = giroPulito ? GIRI.note : DATI.note;
+notaIn = new Map(noteAttive.map(n => [`${n.corda}:${n.cella}`, n]));
+
 function disegna() {
   const colonne = Math.floor((tab.clientWidth - 24) / larghezzaCarattere());
   const perRigo = Math.max(1, Math.floor((colonne - PREFISSO) / (PB * CELLA + 1)));
@@ -418,6 +514,25 @@ function disegna() {
     const ultimo = b0 + perRigo >= battuteTotali;
     const rigo = document.createElement("div");
     rigo.className = "rigo";
+    if (GIRI.etichette.size) {
+      // Sopra ogni battuta, il giro a cui appartiene: «A», o «A*» se è una variazione.
+      const sopra = document.createElement("div");
+      sopra.className = "giri";
+      let colonna = 0;
+      for (let b = b0; b < Math.min(battuteTotali, b0 + perRigo); b++) {
+        const e = GIRI.etichette.get(b);
+        if (!e) continue;
+        const dove = PREFISSO + (b - b0) * (PB * CELLA + 1);
+        sopra.append(" ".repeat(Math.max(0, dove - colonna)));
+        const s = document.createElement("span");
+        s.className = e.variazione ? "giro variazione" : "giro";
+        s.textContent = `giro ${e.nome}${e.variazione ? "*" : ""}`;
+        s.title = e.variazione ? `variazione del giro ${e.nome}` : `giro ${e.nome}, ripetuto ${e.volte} volte`;
+        sopra.append(s);
+        colonna = dove + s.textContent.length;
+      }
+      if (sopra.childNodes.length) rigo.append(sopra);
+    }
     if (accordi.length) {
       const fatto = incolonna(accordi, a_, da, a, ultimo, "accordi", "accordo", x => x.nome, accordiEl);
       a_ = fatto.indice;
@@ -609,6 +724,21 @@ function seguiRighi(ora) {
   }
 }
 
+{
+  const b = document.getElementById("bGiro");
+  b.hidden = !GIRI.etichette.size;
+  const mostra = () => { b.classList.toggle("attivo", giroPulito); b.textContent = giroPulito ? "Giro pulito" : "Come l'ha sentito"; };
+  mostra();
+  b.onclick = () => {
+    giroPulito = !giroPulito;
+    try { localStorage.setItem("giro", giroPulito ? "pulito" : "sentito"); } catch {}
+    noteAttive = giroPulito ? GIRI.note : DATI.note;
+    notaIn = new Map(noteAttive.map(n => [`${n.corda}:${n.cella}`, n]));
+    mostra();
+    disegna();
+  };
+}
+
 let rifai;
 addEventListener("resize", () => { clearTimeout(rifai); rifai = setTimeout(disegna, 150); });
 
@@ -652,7 +782,7 @@ setInterval(() => {
   seguiRighi(ora);
   if (guida.duration) scorri.value = Math.round((ora / guida.duration) * 1000);
 
-  const vicina = DATI.note.reduce(
+  const vicina = noteAttive.reduce(
     (scelta, n) => (n.quando <= ora + DATI.durataCella / 2 ? n : scelta), null);
   const chiave = vicina ? `${vicina.corda}:${vicina.cella}` : null;
   if (chiave !== acceso) {
