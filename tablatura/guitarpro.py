@@ -99,6 +99,7 @@ def cerca(canzone: str, album: str, musica: Path, quante: int = 12, vuole: str =
     """Le tablature più somiglianti a questa canzone, con un punteggio da 0 a 1."""
     titoli = [_semplice(t) for t in _titoli_possibili(canzone)]
     contesto = set(_semplice(f"{album} {canzone.replace('_', ' ')}").split())
+    contesto_unito = "".join(_semplice(f"{album} {canzone.replace('_', ' ')}").split())
     risultati = []
     for archivio in archivi(musica):
         for nome, artista, t in elenco(archivio):
@@ -109,6 +110,9 @@ def cerca(canzone: str, album: str, musica: Path, quante: int = 12, vuole: str =
                 continue
             parole_artista = set(artista.split())
             artista_ok = len(parole_artista & contesto) / max(1, len(parole_artista))
+            # «AC/DC» nella tua musica, «ACDC» nell'archivio: si confrontano anche senza spazi.
+            if artista_ok < 1 and artista.replace(" ", "") and artista.replace(" ", "") in contesto_unito:
+                artista_ok = 1.0
             punteggio = 0.7 * somiglia + 0.3 * artista_ok
             risultati.append({"archivio": archivio.name, "nome": nome, "punteggio": round(punteggio, 3)})
     risultati.sort(key=lambda r: -r["punteggio"])
@@ -227,10 +231,11 @@ def _per_titolo(musica: Path) -> dict[str, list[set[str]]]:
 def ha_tablatura(musica: Path, artista: str, titolo: str) -> bool:
     """Veloce: c'è negli archivi una tablatura con questo titolo e un artista compatibile?"""
     indice = _per_titolo(musica)
-    parole = set(_semplice(artista.replace(",", " ")).split())
+    in_ordine = _semplice(artista.replace(",", " ")).split()
+    parole, unito = set(in_ordine), "".join(in_ordine)
     for t in {_semplice(titolo)} | {_semplice(x) for x in _titoli_possibili(titolo)}:
         for artisti_di in indice.get(t, []):
-            if not parole or parole & artisti_di:
+            if not parole or parole & artisti_di or any(unito == a or (len(a) > 2 and a in unito) for a in artisti_di):
                 return True
     return False
 
