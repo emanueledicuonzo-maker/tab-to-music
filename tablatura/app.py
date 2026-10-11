@@ -407,6 +407,12 @@ class Risponditore(BaseHTTPRequestHandler):
             interna = libreria.copertina_interna(p) if p else None
             if interna:
                 return self.manda(interna[0], interna[1], altre={"Cache-Control": "max-age=3600"})
+            # Né nella cartella né nel file: dalla ricerca di iTunes, salvata una volta.
+            if p:
+                v = voce_di(str(p))
+                dati_online = online.copertina_online(v["artista"], v["album"], v["titolo"])
+                if dati_online:
+                    return self.manda(dati_online, "image/jpeg", altre={"Cache-Control": "max-age=86400"})
             return self.manda(b"", "image/png", 404)
         if percorso == "/api/testo":
             return self.json(self.testo_online(domanda.get("id", "")))
