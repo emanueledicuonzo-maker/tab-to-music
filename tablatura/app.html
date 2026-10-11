@@ -100,7 +100,7 @@
 <header>
   <span class="marchio"><i></i>Tablatura</span>
   <h1 id="titolo"></h1>
-  <button id="bMusica" class="primario">Libreria</button>
+  <button id="bLaMusica" class="primario">Libreria</button>
   <button id="bLibreria">Tablature</button>
   <button id="bImporta">Importa</button>
   <button id="bInstalla" class="primario" hidden title="Installa Tablatura come app">Installa l'app</button>
@@ -295,7 +295,7 @@ function apriDisco(percorso, titolo) {
   $("dMusica").close();
 }
 $("cercaMusica").oninput = e => disegnaArtistiMusica(e.target.value);
-$("bMusica").onclick = mostraMusica;
+$("bLaMusica").onclick = mostraMusica;
 
 // ---------------------------------------------------------------- Tablature
 let cercaTimer;
