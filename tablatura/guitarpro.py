@@ -64,7 +64,38 @@ def _titoli_possibili(canzone: str) -> list[str]:
     return pezzi or [nome]
 
 
-def cerca(canzone: str, album: str, musica: Path, quante: int = 12) -> list[dict]:
+FAMIGLIE = ["Pianoforte", "Percussioni", "Organo", "Chitarra", "Basso", "Archi", "Archi", "Ottoni",
+            "Fiati", "Flauti", "Synth", "Synth", "Effetti", "Etnici", "Percussioni", "Effetti"]
+
+
+def strumenti(dati: bytes) -> list[str]:
+    """Gli strumenti di un file Guitar Pro 3-5, dal suono di ogni traccia."""
+    import io
+
+    import guitarpro
+
+    try:
+        canzone = guitarpro.parse(io.BytesIO(dati))
+    except Exception:
+        return []
+    fuori = []
+    for t in canzone.tracks:
+        if t.isPercussionTrack:
+            fuori.append("Batteria")
+        elif re.search(r"voc|voz|voix|voice|vox|sing|canto|coro|choir", t.name or "", re.I):
+            fuori.append("Voce")
+        elif len(t.strings) in (4, 5) and min(s.value for s in t.strings) < 35:
+            fuori.append("Basso")
+        else:
+            fuori.append(FAMIGLIE[(t.channel.instrument or 0) // 8])
+    return fuori
+
+
+def _leggi(archivio: Path, nome: str) -> bytes:
+    return subprocess.run(["unzip", "-p", str(archivio), nome], capture_output=True).stdout
+
+
+def cerca(canzone: str, album: str, musica: Path, quante: int = 12, vuole: str = "Basso") -> list[dict]:
     """Le tablature più somiglianti a questa canzone, con un punteggio da 0 a 1."""
     titoli = [_semplice(t) for t in _titoli_possibili(canzone)]
     contesto = set(_semplice(f"{album} {canzone.replace('_', ' ')}").split())
@@ -81,7 +112,22 @@ def cerca(canzone: str, album: str, musica: Path, quante: int = 12) -> list[dict
             punteggio = 0.7 * somiglia + 0.3 * artista_ok
             risultati.append({"archivio": archivio.name, "nome": nome, "punteggio": round(punteggio, 3)})
     risultati.sort(key=lambda r: -r["punteggio"])
-    return risultati[:quante]
+    # Delle migliori si guarda dentro: quali strumenti ha ogni file. Quelle con
+    # lo strumento che serve (di solito il basso) vanno in cima.
+    migliori = risultati[: quante * 2]
+    per_nome = {a.name: a for a in archivi(musica)}
+    for r in migliori:
+        r["strumenti"] = strumenti(_leggi(per_nome[r["archivio"]], r["nome"]))
+        r["ha"] = vuole in r["strumenti"]
+    migliori.sort(key=lambda r: (not r["ha"], -r["punteggio"], -len(r["strumenti"])))
+    # Lo stesso file sta spesso in più cartelle dell'archivio: uno solo.
+    visti, unici = set(), []
+    for r in migliori:
+        chiave = (Path(r["nome"]).name.lower(), tuple(r["strumenti"]))
+        if chiave not in visti:
+            visti.add(chiave)
+            unici.append(r)
+    return unici[:quante]
 
 
 def di(cartella: Path) -> Path | None:

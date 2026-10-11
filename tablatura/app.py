@@ -184,6 +184,12 @@ def pagina_di(cartella: Path) -> str:
     così anche le canzoni lavorate prima hanno la pagina più recente."""
     tab = json.loads((cartella / "leggio.json").read_text(encoding="utf-8"))
     bpm = 60.0 / (tab["durataCella"] * 4)
+    # Le canzoni lavorate prima non avevano l'accordatura in numeri: senza, la
+    # sincronia con Guitar Pro non sa che nota è ogni tasto.
+    if "cordeMidi" not in tab:
+        conosciuto = next((s for s in STRUMENTI.values() if s.nome == tab.get("strumento")), None)
+        if conosciuto:
+            tab["cordeMidi"] = list(conosciuto.corde)
     tracce = [{"nome": f.stem, "file": urllib.parse.quote(f.name)} for f in sorted(cartella.glob("*.wav"))]
     nome = next((s.nome for s in STRUMENTI.values() if s.nome == tab.get("strumento")), tab.get("strumento", ""))
     immagine = copertina.di(cartella.parent)
@@ -268,7 +274,9 @@ class Risponditore(BaseHTTPRequestHandler):
             cartella = self.canzone(domanda.get("id", ""))
             if cartella is None:
                 return self.json([], 404)
-            return self.json(guitarpro.cerca(cartella.name, cartella.parent.name, MUSICA))
+            tab = json.loads((cartella / "leggio.json").read_text(encoding="utf-8"))
+            vuole = "Basso" if "basso" in tab.get("strumento", "basso") else "Chitarra"
+            return self.json(guitarpro.cerca(cartella.name, cartella.parent.name, MUSICA, vuole=vuole))
         if percorso == "/api/sincronia":
             cartella = self.canzone(domanda.get("id", ""))
             return self.json(guitarpro.leggi_sincronia(cartella) if cartella else {})

@@ -195,6 +195,13 @@ PAGINA = """<!doctype html>
   #gp { display: none; }
   body.sologp #gp { display: block; }
   body.sologp #tab, body.sologp #canzoniere, body.sologp #legenda, body.sologp #diagrammi, body.sologp #bGiro { display: none !important; }
+  #gpStrumenti { position: sticky; top: 92px; z-index: 4; display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 0;
+                 margin-bottom: 8px; background: linear-gradient(#06060bf0, #06060bd0); backdrop-filter: blur(8px); }
+  .strumento { display: flex; align-items: center; gap: 10px; padding: 8px 14px; text-align: left; }
+  .strumento .icona { font-size: 22px; }
+  .strumento small { display: block; color: var(--tenue); font-size: 11px; }
+  .strumento.basso { border-color: #ffb02066; }
+  .strumento.attivo { border-color: var(--acceso); background: #ffb0201a; box-shadow: 0 0 18px #ffb02033; }
   .gpBarra { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
   .gpBarra select { font: inherit; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--bordo); background: #ffffff08; color: inherit; }
   .gpBarra select option { background: #111; }
@@ -209,7 +216,9 @@ PAGINA = """<!doctype html>
   .gpTesta { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--bordo); }
   .gpTesta .chiudi { border: 0; background: transparent; font-size: 22px; color: var(--tenue); }
   #gpElenco { display: flex; flex-direction: column; gap: 6px; padding: 12px 18px; max-height: 50vh; overflow: auto; }
-  .gpVoce { text-align: left; }
+  .gpVoce { text-align: left; display: flex; flex-direction: column; gap: 2px; }
+  .gpVoce small { color: var(--tenue); font-size: 12px; }
+  .gpVoce.ha small { color: #6bffa0; }
   .gpCarica { display: block; padding: 12px 18px 18px; color: var(--tenue); font-size: 13px; }
   .gpCarica input { display: block; margin-top: 8px; color: var(--testo); }
   #canzoniere { display: none; font: 20px/1.55 ui-monospace, "Ubuntu Mono", monospace; }
@@ -262,8 +271,8 @@ PAGINA = """<!doctype html>
 <div id="tab"></div>
 <div id="canzoniere"></div>
 <section id="gp">
+  <div id="gpStrumenti"></div>
   <div class="gpBarra">
-    <label>Traccia <select id="gpTraccia"></select></label>
     <button id="gpPrima" title="Tutta la tablatura un decimo di secondo prima">−0,1 s</button>
     <button id="gpDopo" title="Tutta la tablatura un decimo di secondo dopo">+0,1 s</button>
     <button id="gpRifai" title="Rifà la sincronia automatica, buttando le correzioni">Risincronizza</button>
@@ -987,6 +996,30 @@ addEventListener("keydown", e => {
 // scorrere sulle nostre tracce separate. Il file ha un tempo suo, il disco un
 // altro: la sincronia dice a che istante del disco comincia ogni battuta, e
 // la si trova confrontando le note del file con quelle che abbiamo sentito.
+let gpManuale = false;
+function disegnaStrumenti() {
+  // Una fila di pulsanti, uno per traccia del file: si vede subito cosa c'è.
+  const fila = document.getElementById("gpStrumenti");
+  fila.textContent = "";
+  gpScore.tracks.forEach((t, i) => {
+    const tipo = strumentoDi(t);
+    const b = document.createElement("button");
+    b.className = "strumento" + (i === gpTraccia ? " attivo" : "") + (tipo === "Basso" ? " basso" : "");
+    b.innerHTML = `<span class="icona">${ICONE[tipo] || "🎵"}</span><span><b></b><small></small></span>`;
+    b.querySelector("b").textContent = t.name?.trim() || tipo;
+    b.querySelector("small").textContent = t.name?.trim() ? tipo : `traccia ${i + 1}`;
+    b.onclick = () => {
+      gpTraccia = i; gpManuale = true;
+      disegnaStrumenti();
+      at.renderTracks([gpScore.tracks[i]]);
+      applicaPunti(gpPunti);
+    };
+    fila.append(b);
+  });
+  if (!gpScore.tracks.some(t => strumentoDi(t) === "Basso") && (DATI.strumento || "").includes("basso")) {
+    statoGP.textContent = "In questo file non c'è il basso: con «Guitar Pro…» scegline un altro.";
+  }
+}
 let at = null, gpScore = null, gpTraccia = 0, gpTempi = [], gpPunti = [];
 const statoGP = document.getElementById("gpStato");
 
@@ -1100,14 +1133,24 @@ function applicaPunti(punti, salva = true) {
   gpScore.applyFlatSyncPoints(punti);
   at.updateSyncPoints();
   if (salva) fetch("/api/sincronia", { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id: GP.id, sincronia: { traccia: gpTraccia, punti } }) }).catch(() => {});
+    body: JSON.stringify({ id: GP.id, sincronia: { v: 2, traccia: gpTraccia, manuale: gpManuale, punti } }) }).catch(() => {});
 }
 
+// Lo strumento di una traccia, dal suono che il file le assegna (i numeri
+// General MIDI) e non dal nome: molti file hanno le tracce senza nome.
+const FAMIGLIE = ["Pianoforte", "Percussioni", "Organo", "Chitarra", "Basso", "Archi", "Archi", "Ottoni",
+                  "Fiati", "Flauti", "Synth", "Synth", "Effetti", "Etnici", "Percussioni", "Effetti"];
+const ICONE = { Pianoforte: "🎹", Organo: "🎹", Chitarra: "🎸", Basso: "🎸", Batteria: "🥁", Archi: "🎻", Ottoni: "🎺",
+                Fiati: "🎷", Flauti: "🪈", Synth: "🎛️", Voce: "🎤" };
+function strumentoDi(t) {
+  if (t.playbackInfo?.primaryChannel === 9 || t.staves[0]?.isPercussion) return "Batteria";
+  if (/voc|voz|voix|voice|vox|sing|canto|coro|choir/i.test(t.name || "")) return "Voce";
+  const p = t.playbackInfo?.program ?? 0;
+  return FAMIGLIE[Math.floor(p / 8)] || "Strumento";
+}
 function tracciaDelBasso(score) {
-  const basso = /bass|basso/i;
-  const vuole = (DATI.strumento || "").includes("basso");
-  const indice = score.tracks.findIndex(t => vuole ? basso.test(t.name) || (t.staves[0].tuning || []).some(n => n < 32)
-                                                    : /guit|chit/i.test(t.name) && !basso.test(t.name));
+  const vuole = (DATI.strumento || "").includes("basso") ? "Basso" : "Chitarra";
+  const indice = score.tracks.findIndex(t => strumentoDi(t) === vuole);
   return Math.max(0, indice);
 }
 
@@ -1135,15 +1178,16 @@ async function apriGP() {
   at.scoreLoaded.on(async score => {
     gpScore = score;
     gpTempi = tempiDelFile(score);
-    const scelta = document.getElementById("gpTraccia");
-    scelta.textContent = "";
-    score.tracks.forEach((t, i) => scelta.append(new Option(t.name || `traccia ${i + 1}`, i)));
     const salvata = await fetch("/api/sincronia?id=" + encodeURIComponent(GP.id)).then(r => r.json()).catch(() => ({}));
-    gpTraccia = salvata.traccia ?? tracciaDelBasso(score);
-    scelta.value = gpTraccia;
+    // La traccia salvata vale solo se l'hai scelta tu; se no si parte dal basso.
+    gpTraccia = salvata.manuale ? salvata.traccia : tracciaDelBasso(score);
+    disegnaStrumenti();
     at.renderTracks([score.tracks[gpTraccia]]);
     const pronto = () => {
-      if (salvata.punti && salvata.punti.length) { applicaPunti(salvata.punti, false); statoGP.textContent = "Sincronia salvata."; }
+      // La sincronia salvata vale se era fatta sulla stessa traccia (o sistemata a mano).
+      if (salvata.punti && salvata.punti.length && (salvata.manuale || (salvata.v === 2 && salvata.traccia === gpTraccia))) {
+        gpManuale = !!salvata.manuale; applicaPunti(salvata.punti, false); statoGP.textContent = "Sincronia salvata.";
+      }
       else { statoGP.textContent = "Sincronizzo con le note sentite…"; setTimeout(() => { applicaPunti(sincroniaAutomatica()); statoGP.textContent = "Sincronizzata in automatico. Se una battuta parte storta: falla suonare e cliccala nel momento giusto."; }, 30); }
     };
     if (guida.duration) pronto(); else guida.addEventListener("loadedmetadata", pronto, { once: true });
@@ -1159,11 +1203,7 @@ async function apriGP() {
     applicaPunti(gpPunti.map((p, i) => (i >= k ? { ...p, millisecondOffset: Math.max(0, p.millisecondOffset + delta) } : p)));
     statoGP.textContent = `Battuta ${bar + 1} agganciata a ${orologio(adesso / 1000)}.`;
   });
-  document.getElementById("gpTraccia").onchange = e => {
-    gpTraccia = Number(e.target.value);
-    at.renderTracks([gpScore.tracks[gpTraccia]]);
-    applicaPunti(gpPunti);
-  };
+  gpManuale = false;
   document.getElementById("gpPrima").onclick = () => applicaPunti(gpPunti.map(p => ({ ...p, millisecondOffset: Math.max(0, p.millisecondOffset - 100) })));
   document.getElementById("gpDopo").onclick = () => applicaPunti(gpPunti.map(p => ({ ...p, millisecondOffset: p.millisecondOffset + 100 })));
   document.getElementById("gpRifai").onclick = () => { applicaPunti(sincroniaAutomatica()); statoGP.textContent = "Rifatta la sincronia automatica."; };
@@ -1181,7 +1221,10 @@ async function scegliGP() {
   for (const t of trovate) {
     const r = document.createElement("button");
     r.className = "gpVoce";
-    r.textContent = t.nome.split("/").slice(-2).join(" / ");
+    r.innerHTML = `<b></b><small></small>`;
+    r.querySelector("b").textContent = t.nome.split("/").slice(-1)[0];
+    r.querySelector("small").textContent = (t.ha ? "✓ " : "✗ ") + (t.strumenti || []).join(", ");
+    if (t.ha) r.classList.add("ha");
     r.title = t.archivio + " · " + t.nome;
     r.onclick = async () => {
       r.disabled = true;
