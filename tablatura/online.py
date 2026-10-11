@@ -52,6 +52,31 @@ def cerca_testo(artista: str, titolo: str, durata: float) -> dict | None:
     return migliore if punti >= 0.6 else None
 
 
+TESTI = Path.home() / ".config" / "tablatura" / "testi"
+
+
+def righe_del_disco(artista: str, titolo: str, durata: float) -> dict:
+    """Le righe del testo sincronizzato per un disco, salvate una volta sola."""
+    import hashlib
+
+    file = TESTI / (hashlib.sha1(f"{artista}|{titolo}|{round(durata)}".lower().encode()).hexdigest()[:16] + ".json")
+    try:
+        return json.loads(file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        pass
+    trovato = cerca_testo(artista, titolo, durata)
+    righe = []
+    if trovato:
+        for r in trovato["syncedLyrics"].splitlines():
+            m = RIGA.match(r.strip())
+            if m:
+                righe.append({"quando": round(int(m.group(1)) * 60 + float(m.group(2)), 2), "testo": m.group(3).strip()})
+    dati = {"righe": righe, "fonte": f"{trovato['artistName']} — {trovato['trackName']}" if trovato else ""}
+    TESTI.mkdir(parents=True, exist_ok=True)
+    file.write_text(json.dumps(dati, ensure_ascii=False), encoding="utf-8")
+    return dati
+
+
 def parole(sincronizzato: str, durata: float) -> list[dict]:
     """Dalle righe [mm:ss.xx] alle parole con il loro istante."""
     righe = []

@@ -271,3 +271,61 @@ def cerca_disco(musica: Path, artista: str, titolo: str, quanti: int = 8) -> lis
         fuori.append({"percorso": percorso, "punteggio": round(0.7 * somiglia + 0.3 * artista_ok, 3)})
     fuori.sort(key=lambda r: -r["punteggio"])
     return fuori[:quanti]
+
+
+def eventi(dati: bytes) -> tuple[list[dict], list[float]]:
+    """Le note di tutti gli strumenti (non la batteria) e gli inizi di battuta, al
+    tempo scritto, da un file Guitar Pro 3-5. Serve a confrontare le versioni
+    col disco senza aprirle nel browser (i ritornelli non si ripetono: basta
+    per scegliere, non per sincronizzare)."""
+    import io
+
+    import guitarpro
+
+    try:
+        canzone = guitarpro.parse(io.BytesIO(dati))
+    except Exception:
+        return [], []
+    tempo = canzone.tempo or 120
+    fuori, battute, t_ms = [], [], 0.0
+    for i, testa in enumerate(canzone.measureHeaders):
+        battute.append(t_ms)
+        durata = testa.timeSignature.numerator * (4 / testa.timeSignature.denominator.value) * 60000 / tempo
+        for traccia in canzone.tracks:
+            if traccia.isPercussionTrack or i >= len(traccia.measures):
+                continue
+            for voce in traccia.measures[i].voices:
+                for beat in voce.beats:
+                    inizio = t_ms + (beat.start - testa.start) / 960 * 60000 / tempo
+                    for nota in beat.notes:
+                        if 0 < nota.string <= len(traccia.strings):
+                            fuori.append({"inizio": inizio, "durata": beat.duration.time / 960 * 60000 / tempo,
+                                          "midi": traccia.strings[nota.string - 1].value + nota.value})
+        t_ms += durata
+    return fuori, battute
+
+
+def versione_piu_vicina(audio: Path, candidati: list[dict], musica: Path, quante: int = 6) -> list[dict]:
+    """Prova le versioni candidate sul disco e le mette in ordine di somiglianza."""
+    from . import allinea
+
+    import math
+
+    import soundfile
+
+    durata_disco = soundfile.info(str(audio)).duration * 1000
+    per_nome = {a.name: a for a in archivi(musica)}
+    provate = []
+    for c in candidati[:quante]:
+        ev, bt = eventi(_leggi(per_nome[c["archivio"]], c["nome"]))
+        if not ev:
+            provate.append(c | {"costo": 9.0})
+            continue
+        # Due cose: quanto le note combaciano, e quanto va stirata la tablatura
+        # per coprire il disco. Un arrangiamento diverso o un pezzo solo (l'assolo
+        # di Beat It) combacia a tratti ma è lungo la metà: lo si penalizza.
+        lunghezza = max(e["inizio"] + e["durata"] for e in ev)
+        stiro = abs(math.log(max(lunghezza, 1) / max(durata_disco, 1)))
+        provate.append(c | {"costo": round(allinea.somiglianza(audio, ev, bt) + 0.4 * stiro, 4)})
+    provate.sort(key=lambda c: (c["costo"], -c["punteggio"]))
+    return provate

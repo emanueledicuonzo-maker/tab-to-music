@@ -25,7 +25,7 @@ from dataclasses import asdict, dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import allinea, copertina, guitarpro, libreria, online
+from . import allinea, copertina, guitarpro, libreria, online, testotab
 from .strumenti import STRUMENTI
 from .visore import pagina
 
@@ -140,12 +140,24 @@ def id_fatta(percorso: str) -> str | None:
 
 def tablatura_del_disco(percorso: str) -> dict | None:
     """La tablatura per questo disco: quella scelta da te, o la migliore dell'archivio."""
-    scelte = leggi_stato().get("tabPerDisco", {})
+    stato = leggi_stato()
+    scelte = stato.get("tabPerDisco", {})
     if percorso in scelte:
         return scelte[percorso] | {"scelta": True}
+    # Il controllore: fra le versioni dell'artista giusto, quella che combacia
+    # meglio col disco. Si calcola una volta (qualche secondo) e si ricorda.
+    automatiche = stato.get("tabAutomatica", {})
+    if percorso in automatiche:
+        return automatiche[percorso] | {"scelta": False}
     v = voce_di(percorso)
-    candidati = guitarpro.cerca(v["titolo"], v["artista"], MUSICA, quante=1)
-    return (candidati[0] | {"scelta": False}) if candidati else None
+    candidati = [c for c in guitarpro.cerca(v["titolo"], v["artista"], MUSICA, quante=10) if c["punteggio"] >= 0.85]
+    if not candidati:
+        return None
+    provate = guitarpro.versione_piu_vicina(Path(percorso), candidati, MUSICA)
+    migliore = provate[0] | {"provate": len(provate)}
+    automatiche[percorso] = migliore
+    salva_stato(tabAutomatica=automatiche)
+    return migliore | {"scelta": False}
 
 
 def chiave_sincronia(percorso: str, tab: dict) -> Path:
@@ -390,8 +402,14 @@ class Risponditore(BaseHTTPRequestHandler):
             v = voce_di(p)
             return self.json({"voce": v, "tablatura": tablatura_del_disco(p), "fatta": id_fatta(p)})
         if percorso == "/api/disco/candidati":
-            v = voce_di(domanda.get("percorso", ""))
-            return self.json(guitarpro.cerca(v["titolo"], v["artista"], MUSICA))
+            p = domanda.get("percorso", "")
+            v = voce_di(p)
+            candidati = guitarpro.cerca(v["titolo"], v["artista"], MUSICA, quante=12)
+            giusti = [c for c in candidati if c["punteggio"] >= 0.85]
+            altri = [c for c in candidati if c["punteggio"] < 0.85]
+            # Quelle dell'artista giusto, in ordine di quanto combaciano col disco; poi le altre.
+            provate = guitarpro.versione_piu_vicina(Path(p), giusti, MUSICA, quante=8) if disco_permesso(p) else giusti
+            return self.json(provate + altri)
         if percorso == "/api/disco/gp":
             p = domanda.get("percorso", "")
             tab = tablatura_del_disco(p) if disco_permesso(p) else None
@@ -407,6 +425,12 @@ class Risponditore(BaseHTTPRequestHandler):
                 return self.json(json.loads(file.read_text()) if file else {})
             except (OSError, ValueError):
                 return self.json({})
+        if percorso == "/api/disco/testo":
+            p = disco_permesso(domanda.get("percorso", ""))
+            if not p:
+                return self.json({"righe": []})
+            v = voce_di(str(p))
+            return self.json(online.righe_del_disco(v["artista"], v["titolo"], v.get("durata") or 0))
         if percorso == "/api/disco/copertina":
             p = disco_permesso(domanda.get("percorso", ""))
             immagine = copertina.trova(p) if p else None
@@ -484,6 +508,23 @@ class Risponditore(BaseHTTPRequestHandler):
             scelte[p] = {"tua": str(file), "nome": Path(domanda["nome"]).name}
             salva_stato(tabPerDisco=scelte)
             return self.json({"ok": True})
+        if url.path == "/api/disco/testo_tab":
+            # Una tablatura di testo (copiata da un sito): diventa alphaTex e si collega al disco.
+            p = disco_permesso(dati.get("percorso", ""))
+            if not p:
+                return self.json({"errore": "disco sconosciuto"}, 404)
+            v = voce_di(str(p))
+            try:
+                tex = testotab.converti(dati.get("testo", ""), v["titolo"])
+            except ValueError as errore:
+                return self.json({"errore": str(errore)}, 400)
+            TUE.mkdir(parents=True, exist_ok=True)
+            file = TUE / (hashlib.sha1(str(p).encode()).hexdigest()[:12] + "-testo.atex")
+            file.write_text(tex, encoding="utf-8")
+            scelte = leggi_stato().get("tabPerDisco", {})
+            scelte[str(p)] = {"tua": str(file), "nome": f"{v['titolo']} (text tab)"}
+            salva_stato(tabPerDisco=scelte)
+            return self.json({"ok": True})
         if url.path == "/api/allinea":
             p = disco_permesso(dati.get("percorso", ""))
             tab = tablatura_del_disco(str(p)) if p else None
@@ -494,6 +535,12 @@ class Risponditore(BaseHTTPRequestHandler):
             file.parent.mkdir(parents=True, exist_ok=True)
             file.write_text(json.dumps({"automatica": ms}))
             return self.json({"automatica": ms})
+        if url.path == "/api/allinea_canzone":
+            # La tablatura Guitar Pro sulla canzone lavorata: sulle sue tracce separate.
+            cartella = self.canzone(dati.get("id", ""))
+            if cartella is None:
+                return self.json({"errore": "canzone sconosciuta"}, 404)
+            return self.json({"automatica": allinea.sincronizza(cartella, dati["eventi"], dati["battute"])})
         if url.path == "/api/disco/sincronia":
             p = disco_permesso(dati.get("percorso", ""))
             tab = tablatura_del_disco(str(p)) if p else None
