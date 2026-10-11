@@ -25,7 +25,7 @@ from dataclasses import asdict, dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import allinea, copertina, guitarpro, libreria, online, testotab
+from . import allinea, copertina, guitarpro, libreria, online, t2m, testotab
 from .strumenti import STRUMENTI
 from .visore import pagina
 
@@ -109,6 +109,7 @@ def _cartella_xdg(nome: str, ripiego: str) -> Path:
 CARTELLE_DISCHI = [MUSICA, _cartella_xdg("DOWNLOAD", "Downloads")]
 
 TUE = TAB / "_tablature_tue"          # i file Guitar Pro caricati da te
+T2M = TAB / "t2m"                      # un .t2m per canzone: tab, sincronia, correzioni
 SINCRONIE = FILE_STATO.parent / "sincronie"
 _indice = {"quando": 0.0, "voci": []}
 
@@ -141,20 +142,27 @@ def id_fatta(percorso: str) -> str | None:
 def tablatura_del_disco(percorso: str) -> dict | None:
     """La tablatura per questo disco: quella scelta da te, o la migliore dell'archivio."""
     stato = leggi_stato()
+    # Il .t2m vince su tutto: è la tab con la sincronia e le correzioni già fatte.
+    file_t2m = stato.get("t2mPerDisco", {}).get(percorso)
+    if file_t2m and Path(file_t2m).is_file():
+        dati = t2m.leggi(Path(file_t2m)) or {}
+        return {"t2m": file_t2m, "nome": Path(file_t2m).name, "scelta": True, "fonte": dati.get("source", {})}
     scelte = stato.get("tabPerDisco", {})
     if percorso in scelte:
         return scelte[percorso] | {"scelta": True}
     # Il controllore: fra le versioni dell'artista giusto, quella che combacia
     # meglio col disco. Si calcola una volta (qualche secondo) e si ricorda.
     automatiche = stato.get("tabAutomatica", {})
-    if percorso in automatiche:
+    # «v»: la scelta fatta con un controllore più vecchio (prima della penalità
+    # per le versioni da stirare) non vale più.
+    if percorso in automatiche and automatiche[percorso].get("v") == 2:
         return automatiche[percorso] | {"scelta": False}
     v = voce_di(percorso)
     candidati = [c for c in guitarpro.cerca(v["titolo"], v["artista"], MUSICA, quante=10) if c["punteggio"] >= 0.85]
     if not candidati:
         return None
     provate = guitarpro.versione_piu_vicina(Path(percorso), candidati, MUSICA)
-    migliore = provate[0] | {"provate": len(provate)}
+    migliore = provate[0] | {"provate": len(provate), "v": 2}
     automatiche[percorso] = migliore
     salva_stato(tabAutomatica=automatiche)
     return migliore | {"scelta": False}
@@ -410,6 +418,20 @@ class Risponditore(BaseHTTPRequestHandler):
             # Quelle dell'artista giusto, in ordine di quanto combaciano col disco; poi le altre.
             provate = guitarpro.versione_piu_vicina(Path(p), giusti, MUSICA, quante=8) if disco_permesso(p) else giusti
             return self.json(provate + altri)
+        if percorso == "/api/t2m":
+            p = domanda.get("percorso", "")
+            tab = tablatura_del_disco(p) if disco_permesso(p) else None
+            if not tab or not tab.get("t2m"):
+                return self.json({}, 404)
+            return self.manda(Path(tab["t2m"]).read_bytes(), "application/json")
+        if percorso == "/api/t2m/scarica":
+            p = domanda.get("percorso", "")
+            file = leggi_stato().get("t2mPerDisco", {}).get(p)
+            if not file or not Path(file).is_file():
+                return self.manda(b"", "text/plain", 404)
+            nome = urllib.parse.quote(Path(file).name)
+            return self.manda(Path(file).read_bytes(), "application/json",
+                              altre={"Content-Disposition": f"attachment; filename*=UTF-8''{nome}"})
         if percorso == "/api/disco/gp":
             p = domanda.get("percorso", "")
             tab = tablatura_del_disco(p) if disco_permesso(p) else None
@@ -489,15 +511,56 @@ class Risponditore(BaseHTTPRequestHandler):
                 return self.json({"errore": "canzone sconosciuta"}, 404)
             guitarpro.estrai(cartella, MUSICA, dati["archivio"], dati["nome"])
             return self.json({"ok": True})
+        if url.path == "/api/t2m/salva":
+            # Il lavoro su questa canzone, tutto in un file .t2m (lo chiama la pagina da sola).
+            p = disco_permesso(dati.get("percorso", ""))
+            if not p:
+                return self.json({"errore": "disco sconosciuto"}, 404)
+            v = voce_di(str(p))
+            mappa = leggi_stato().get("t2mPerDisco", {})
+            file = Path(mappa.get(str(p)) or T2M / t2m.nome_file(v["artista"], v["titolo"]))
+            if not mappa.get(str(p)) and file.exists():
+                file = file.with_name(file.stem + f" ({hashlib.sha1(str(p).encode()).hexdigest()[:6]}).t2m")
+            righe = online.righe_del_disco(v["artista"], v["titolo"], v.get("durata") or 0).get("righe")
+            t2m.scrivi(file, voce=v, audio=p, sorgente=dati.get("sorgente", {}), partitura=dati["partitura"],
+                       traccia=dati.get("traccia", 0), sincronia=dati.get("sincronia", {}), righe=righe)
+            mappa[str(p)] = str(file)
+            salva_stato(t2mPerDisco=mappa)
+            return self.json({"file": file.name})
+        if url.path == "/api/t2m/apri":
+            # Un .t2m da fuori: si riconosce il disco dall'impronta e si collega.
+            dati_t2m = json.loads(dati_grezzi or b"{}")
+            if dati_t2m.get("format") != "t2m":
+                return self.json({"errore": "non è un file .t2m"}, 400)
+            canzone = dati_t2m.get("song", {})
+            candidati = [x for x in indice_musica()
+                         if abs((x.get("durata") or 0) - (canzone.get("durata") or 0)) < 8
+                         and libreria._chiave_artista(x["titolo"]) == libreria._chiave_artista(canzone.get("titolo") or "")]
+            migliore, punti = None, 0.0
+            for x in candidati[:6]:
+                s = t2m.somiglianza_impronte(dati_t2m.get("recording", {}), t2m.impronta(Path(x["percorso"])))
+                if s > punti:
+                    migliore, punti = x, s
+            if not migliore or punti < 0.5:
+                return self.json({"errore": "non trovo nella tua musica la registrazione di questo .t2m"}, 404)
+            file = T2M / t2m.nome_file(canzone.get("artista") or "", canzone.get("titolo") or "")
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.write_bytes(dati_grezzi)
+            mappa = leggi_stato().get("t2mPerDisco", {})
+            mappa[migliore["percorso"]] = str(file)
+            salva_stato(t2mPerDisco=mappa)
+            return self.json({"percorso": migliore["percorso"], "somiglianza": round(punti, 2)})
         if url.path == "/api/disco/scegli":
             # La tablatura giusta per questo disco, scelta da te: vale per sempre.
             stato = leggi_stato()
+            self.dimentica_t2m(dati["percorso"])
             scelte = stato.get("tabPerDisco", {})
             scelte[dati["percorso"]] = {"archivio": dati["archivio"], "nome": dati["nome"]}
             salva_stato(tabPerDisco=scelte)
             return self.json({"ok": True})
         if url.path == "/api/disco/carica":
             p = domanda.get("percorso", "")
+            self.dimentica_t2m(p)
             estensione = Path(domanda.get("nome", "")).suffix.lower()
             if not disco_permesso(p) or estensione not in guitarpro.ESTENSIONI:
                 return self.json({"errore": "file non valido"}, 400)
@@ -510,6 +573,7 @@ class Risponditore(BaseHTTPRequestHandler):
             return self.json({"ok": True})
         if url.path == "/api/disco/testo_tab":
             # Una tablatura di testo (copiata da un sito): diventa alphaTex e si collega al disco.
+            self.dimentica_t2m(dati.get("percorso", ""))
             p = disco_permesso(dati.get("percorso", ""))
             if not p:
                 return self.json({"errore": "disco sconosciuto"}, 404)
@@ -629,6 +693,12 @@ class Risponditore(BaseHTTPRequestHandler):
         tab["testoFonte"] = f"{trovato.get('artistName')} — {trovato.get('trackName')}"
         file.write_text(json.dumps(tab), encoding="utf-8")
         return {"trovato": True}
+
+    def dimentica_t2m(self, percorso: str) -> None:
+        """Una tab nuova per questo disco: il .t2m vecchio non vale più (il file resta, si stacca)."""
+        mappa = leggi_stato().get("t2mPerDisco", {})
+        if mappa.pop(percorso, None):
+            salva_stato(t2mPerDisco=mappa)
 
     def canzone(self, id_: str) -> Path | None:
         """La cartella di una canzone dal suo id «album/canzone», solo dentro tab."""

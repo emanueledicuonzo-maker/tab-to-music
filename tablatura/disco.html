@@ -69,6 +69,9 @@
   .candidato small { color: var(--tenue); } .candidato.ha small { color: var(--verde); }
   .carica { display: block; padding: 12px 18px 18px; color: var(--tenue); font-size: 13px; }
   .carica input { display: block; margin-top: 8px; color: var(--testo); }
+  a.bottone { font: inherit; padding: 8px 14px; border: 1px solid var(--bordo); border-radius: 10px; color: var(--testo);
+              background: var(--pannello); text-decoration: none; }
+  a.bottone:hover { border-color: #ffffff33; }
   .carica textarea { display: block; width: 100%; margin: 8px 0; font: 13px/1.4 ui-monospace, monospace; color: var(--testo);
                      background: #ffffff08; border: 1px solid var(--bordo); border-radius: 10px; padding: 10px; }
 </style>
@@ -108,6 +111,8 @@
   <div id="candidati"></div>
   <label class="carica">…or upload a tab you downloaded (.gp, .gpx, .gp5, .gp4, .gp3)
     <input type="file" id="file" accept=".gp,.gpx,.gp5,.gp4,.gp3,.gtp"></label>
+  <label class="carica">…or open a .t2m file (a song you, or someone else, already synced)
+    <input type="file" id="fileT2m" accept=".t2m,application/json"></label>
   <div class="carica">…or paste a text tab (the kind with dashes, from any site). Rhythm is guessed from the spacing.
     <textarea id="testoTab" rows="8" spellcheck="false" placeholder="G|-----------------|&#10;D|--5--------------|&#10;A|---3-3-033-5-----|&#10;E|-----------3(3)--|"></textarea>
     <button id="usaTesto" class="primario">Use this text tab</button> <span id="esitoTesto"></span></div>
@@ -173,7 +178,10 @@ function mostraTab() {
     t.scelta = true; giusta.textContent = "✓ This one (marked)"; giusta.classList.add("attivo");
   };
   const cambia = document.createElement("button"); cambia.textContent = "Change…"; cambia.onclick = apriScelta;
-  el.append(giusta, cambia);
+  const scarica = document.createElement("a"); scarica.className = "bottone"; scarica.href = `/api/t2m/scarica?percorso=${P}`;
+  scarica.textContent = "⬇ .t2m"; scarica.title = "Download this song's .t2m: tab, sync and fixes in one file";
+  const nomeT2m = document.createElement("span"); nomeT2m.className = "nota"; nomeT2m.id = "t2mNome"; nomeT2m.textContent = t.t2m ? t.nome : "";
+  el.append(giusta, cambia, scarica, nomeT2m);
 }
 async function apriScelta() {
   $("dScegli").showModal();
@@ -201,6 +209,13 @@ $("file").onchange = async e => {
   await fetch(`/api/disco/carica?percorso=${P}&nome=${encodeURIComponent(f.name)}`, { method: "POST", body: await f.arrayBuffer() });
   location.reload();
 };
+$("fileT2m").onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = await fetch("/api/t2m/apri", { method: "POST", body: await f.arrayBuffer() }).then(r => r.json());
+  if (r.errore) { alertino(r.errore); return; }
+  location.href = "/libreria/disco?percorso=" + encodeURIComponent(r.percorso);
+};
+const alertino = testo => { const s = document.createElement("p"); s.style.color = "var(--rosa)"; s.style.padding = "0 18px"; s.textContent = testo; $("dScegli").append(s); };
 $("usaTesto").onclick = async () => {
   const r = await fetch("/api/disco/testo_tab", { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ percorso: PERCORSO, testo: $("testoTab").value }) }).then(r => r.json());
@@ -333,8 +348,8 @@ if (info.tablatura) {
     let extra = 0;
     A = A0.map((t, k) => { if (correzioni[k] !== undefined) extra = correzioni[k]; return Math.max(0, t + spostamento + extra); });
     for (let k = 1; k < A.length; k++) A[k] = Math.max(A[k], A[k - 1]);
-    if (salva) fetch("/api/disco/sincronia", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ percorso: PERCORSO, punti: { spostamento, correzioni } }) });
+    if (salva) { fetch("/api/disco/sincronia", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ percorso: PERCORSO, punti: { spostamento, correzioni } }) }); salvaT2m(); }
   }
   // Dal tempo del disco al tempo della tablatura, e ritorno.
   versoTab = function (ms) {
@@ -353,6 +368,12 @@ if (info.tablatura) {
     return A[k] + (msTab - G[k]) / Math.max(1, battute[k].durata) * (fineA - A[k]);
   }
   async function sincronizza(forza) {
+    if (!forza && datiT2m?.sync?.automatica?.length === battute.length) {
+      A0 = datiT2m.sync.automatica; spostamento = datiT2m.sync.spostamento || 0; correzioni = datiT2m.sync.correzioni || {};
+      ricalcola(false);
+      $("stato").textContent = "Opened from the .t2m file, with its sync and fixes.";
+      return;
+    }
     const salvata = forza ? {} : await fetch(`/api/disco/sincronia?percorso=${P}`).then(r => r.json()).catch(() => ({}));
     let ms = salvata.automatica;
     if (!ms || ms.length !== battute.length) {
@@ -366,6 +387,7 @@ if (info.tablatura) {
     spostamento = forza ? 0 : p.spostamento || 0;
     correzioni = forza ? {} : p.correzioni || {};
     ricalcola(forza);
+    salvaT2m();
     $("stato").textContent = Object.keys(correzioni).length || spostamento ? "Saved sync (with your fixes)."
       : "Synced to the recording. If a bar is off: while playing, click it at the right moment.";
   }
@@ -375,17 +397,44 @@ if (info.tablatura) {
       get playbackRate() { return disco.playbackRate; }, set playbackRate(x) {},
       get masterVolume() { return disco.volume; }, set masterVolume(x) {},
       // alphaTab chiede un punto della tablatura (clic su una nota): lo si traduce nel disco.
-      seekTo(msTab) { if (!stoCorreggendo) disco.currentTime = versoDisco(msTab) / 1000; },
+      seekTo(msTab) {
+        if (stoCorreggendo || !A.length) return;
+        const t = versoDisco(msTab) / 1000;
+        if (Number.isFinite(t)) disco.currentTime = t;
+      },
       play() { disco.play(); }, pause() { disco.pause(); },
     };
   });
   let stoCorreggendo = false;
-  // Un file Guitar Pro si carica com'è; una tablatura di testo è già stata convertita in alphaTex.
-  if ((info.tablatura.tua || "").endsWith(".atex")) fetch(`/api/disco/gp?percorso=${P}`).then(r => r.text()).then(t => at.tex(t));
+  // Il .t2m ha già la partitura (nel JSON di alphaTab) e la sincronia; un file Guitar Pro si carica
+  // com'è; una tablatura di testo è già stata convertita in alphaTex.
+  let datiT2m = null;
+  if (info.tablatura.t2m) fetch(`/api/t2m?percorso=${P}`).then(r => r.json()).then(d => {
+    datiT2m = d;
+    const s = alphaTab.model.JsonConverter.jsObjectToScore(d.score, at.settings);
+    at.renderScore(s, [d.view?.track ?? 0]);
+  });
+  else if ((info.tablatura.tua || "").endsWith(".atex")) fetch(`/api/disco/gp?percorso=${P}`).then(r => r.text()).then(t => at.tex(t));
   else fetch(`/api/disco/gp?percorso=${P}`).then(r => r.arrayBuffer()).then(b => at.load(new Uint8Array(b)));
+
+  // Il .t2m si riscrive da solo, un attimo dopo ogni sincronia o correzione.
+  let salvaTimer;
+  function salvaT2m() {
+    clearTimeout(salvaTimer);
+    salvaTimer = setTimeout(() => {
+      if (!score || !A0.length) return;
+      const t = info.tablatura;
+      const sorgente = t.t2m ? (datiT2m?.source || {}) : t.tua ? { type: t.tua.endsWith(".atex") ? "text-tab" : "guitarpro-file", name: t.nome }
+                                                             : { type: "guitarpro-archive", archive: t.archivio, name: t.nome };
+      fetch("/api/t2m/salva", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ percorso: PERCORSO, sorgente, partitura: alphaTab.model.JsonConverter.scoreToJson(score), traccia: vista,
+                               sincronia: { automatica: A0, spostamento, correzioni } }) })
+        .then(r => r.json()).then(r => { if (r.file) $("t2mNome").textContent = r.file; }).catch(() => {});
+    }, 1500);
+  }
   at.scoreLoaded.on(s => {
     score = s;
-    vista = Math.max(0, s.tracks.findIndex(t => strumentoDi(t) === "Basso"));
+    vista = datiT2m?.view?.track ?? Math.max(0, s.tracks.findIndex(t => strumentoDi(t) === "Basso"));
     disegnaStrumenti();
     at.renderTracks([s.tracks[vista]]);
   });
@@ -405,7 +454,7 @@ if (info.tablatura) {
       b.innerHTML = `<span class="icona">${ICONE[tipo] || "🎵"}</span><span><b></b><small></small></span>`;
       b.querySelector("b").textContent = t.name?.trim() || EN[tipo] || tipo;
       b.querySelector("small").textContent = t.name?.trim() ? EN[tipo] || tipo : `track ${i + 1}`;
-      b.onclick = () => { vista = i; disegnaStrumenti(); at.renderTracks([t]); };
+      b.onclick = () => { vista = i; disegnaStrumenti(); at.renderTracks([t]); salvaT2m(); };
       el.append(b);
     });
   }
