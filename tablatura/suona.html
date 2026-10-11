@@ -54,16 +54,6 @@
   <div id="disco"><span class="nota">Cerco il disco in Musica…</span></div>
 </section>
 
-<div class="trasporto">
-  <button id="via" title="Suona / ferma (spazio)" disabled>▶</button>
-  <button id="ferma" title="Torna all'inizio">⏮</button>
-  <span id="tempo">0:00 / 0:00</span>
-  <button data-v="0.5">0,5×</button><button data-v="0.75">0,75×</button><button data-v="1" class="attivo">1×</button>
-  <button id="ripeti" title="Ripete la parte selezionata (trascina sulla tablatura per selezionare)">Ripeti</button>
-  <button id="metronomo" title="Metronomo">Metronomo</button>
-  <span id="stato">Carico i suoni…</span>
-</div>
-
 <div id="tracce"></div>
 <div id="alphaTab"></div>
 
@@ -91,14 +81,12 @@ function strumentoDi(t) {
 }
 
 // Il banco di suoni: uno tuo messo in Musica (.sf2/.sf3), altrimenti MuseScore General.
-const SUONI = await fetch("/api/suoni").then(r => r.json()).catch(() => ({ url: "/pwa/alphatab/soundfont/MuseScore_General.sf3", nome: "MuseScore General" }));
 const at = new alphaTab.AlphaTabApi($("alphaTab"), {
   core: { fontDirectory: "/pwa/alphatab/font/" },
   display: { staveProfile: alphaTab.StaveProfile.Tab, resources: { mainGlyphColor: "#d9dcea", secondaryGlyphColor: "#9aa0b4",
              staffLineColor: "#ffffff33", barSeparatorColor: "#ffffff44", scoreInfoColor: "#eef0f6" } },
-  player: { playerMode: alphaTab.PlayerMode.EnabledSynthesizer, enableCursor: true, enableAnimatedBeatCursor: true,
-            enableUserInteraction: true, scrollMode: alphaTab.ScrollMode.Continuous, scrollOffsetY: -160,
-            soundFont: SUONI.url },
+  // Niente sintetizzatore: le tablature suonano solo sul disco vero.
+  player: { playerMode: alphaTab.PlayerMode.Disabled },
 });
 window.at = at;   // comodo dalla console del browser
 let vista = 0;
@@ -112,16 +100,6 @@ at.scoreLoaded.on(score => {
   disegnaTracce(score);
   at.renderTracks([score.tracks[vista]]);
 });
-at.soundFontLoad.on(e => {
-  const p = Math.round(e.loaded / e.total * 100);
-  $("stato").textContent = p < 100 ? `Carico i suoni… ${p}%` : "Suoni pronti: premi ▶.";
-  // Il clic su ▶ accende l'audio del browser: da lì il lettore è pronto davvero.
-  if (p >= 100) $("via").disabled = false;
-});
-at.playerReady.on(() => { $("via").disabled = false; $("stato").textContent = `Suoni di ${SUONI.nome}. Trascina sulla tablatura per scegliere un pezzo da ripetere.`; });
-at.playerStateChanged.on(e => { $("via").textContent = e.state === 1 ? "⏸" : "▶"; });
-at.playerPositionChanged.on(e => { $("tempo").textContent = `${orologio(e.currentTime)} / ${orologio(e.endTime)}`; });
-
 function disegnaTracce(score) {
   const el = $("tracce");
   el.textContent = "";
@@ -130,27 +108,13 @@ function disegnaTracce(score) {
     const r = document.createElement("div");
     r.className = "traccia" + (i === vista ? " vista" : "");
     r.innerHTML = `<span class="nome" title="Mostra questa traccia"><span>${ICONE[tipo] || "🎵"}</span><span><b></b><small></small></span></span>
-      <button class="muta">muta</button><button class="solo">solo</button><input type="range" min="0" max="16" value="${t.playbackInfo.volume}">`;
+`;
     r.querySelector("b").textContent = t.name?.trim() || tipo;
     r.querySelector("small").textContent = t.name?.trim() ? tipo : `traccia ${i + 1}`;
     r.querySelector(".nome").onclick = () => { vista = i; at.renderTracks([t]); disegnaTracce(score); };
-    const muta = r.querySelector(".muta"), solo = r.querySelector(".solo");
-    muta.onclick = () => { const s = !muta.classList.contains("attivo"); muta.classList.toggle("attivo", s); at.changeTrackMute([t], s); };
-    solo.onclick = () => { const s = !solo.classList.contains("attivo"); solo.classList.toggle("attivo", s); at.changeTrackSolo([t], s); };
-    r.querySelector("input").oninput = e => at.changeTrackVolume([t], e.target.value / t.playbackInfo.volume || 0);
     el.append(r);
   });
 }
-
-$("via").onclick = () => at.playPause();
-$("ferma").onclick = () => at.stop();
-for (const b of document.querySelectorAll("[data-v]")) b.onclick = () => {
-  at.playbackSpeed = Number(b.dataset.v);
-  document.querySelectorAll("[data-v]").forEach(x => x.classList.toggle("attivo", x === b));
-};
-$("ripeti").onclick = () => { at.isLooping = !at.isLooping; $("ripeti").classList.toggle("attivo", at.isLooping); };
-$("metronomo").onclick = () => { at.metronomeVolume = at.metronomeVolume ? 0 : 1; $("metronomo").classList.toggle("attivo", !!at.metronomeVolume); };
-addEventListener("keydown", e => { if (e.code === "Space" && !/INPUT|BUTTON/.test(document.activeElement.tagName)) { e.preventDefault(); at.playPause(); } });
 
 // «È questa»: per questa canzone la libreria aprirà sempre questa versione.
 const CHIAVE = `${ARTISTA}|${TITOLO.replace(/\s*\(\d+\)\s*$/, "")}`;
@@ -168,46 +132,23 @@ $("giusta").onclick = async () => {
   $("giusta").textContent = gia ? "✓ È questa" : "✓ È questa (segnata)";
 };
 
-// Il disco vero: se c'è, la tablatura va sulle tracce separate del disco.
-async function usa(corpo) {
-  const r = await fetch("/api/libreria/usa", { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ archivio: ARCHIVIO, nome: NOME, ...corpo }) }).then(r => r.json());
-  try { localStorage.setItem("vista", "gp"); } catch {}
-  if (r.id) { at.stop(); (window.parent.apri || (id => location.href = "/"))(r.id); return; }
-  if (r.inLavorazione) aspetta(r.inLavorazione);
-}
-function aspetta(id) {
-  $("disco").innerHTML = `<span class="nota">Sto separando le tracce del disco e sincronizzando (3-4 minuti). Intanto suona con gli strumenti di Guitar Pro.</span>`;
-  const giro = setInterval(async () => {
-    const { coda } = await fetch("/api/stato").then(r => r.json());
-    const l = coda.find(l => `${l.album}/${l.titolo}` === id);
-    if (l && l.stato === "fatta") {
-      clearInterval(giro);
-      $("disco").innerHTML = `<span class="ok">✓ Pronta col disco vero.</span>`;
-      const b = document.createElement("button"); b.className = "primario"; b.textContent = "Apri col disco";
-      b.onclick = () => { at.stop(); window.parent.apri ? window.parent.apri(id) : (location.href = "/"); };
-      $("disco").append(b);
-    } else if (l && l.stato === "errore") { clearInterval(giro); $("disco").innerHTML = `<span class="nota">Il disco non si è lasciato lavorare: resta con gli strumenti di Guitar Pro.</span>`; }
-  }, 3000);
+// Il disco vero: se c'è in Musica, la tablatura si suona lì sopra.
+async function suonaSul(percorso) {
+  await fetch("/api/disco/scegli", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ percorso, archivio: ARCHIVIO, nome: NOME }) });
+  location.href = "/libreria/disco?percorso=" + encodeURIComponent(percorso);
 }
 (async () => {
-  const r = await fetch(`/api/libreria/disco?artista=${encodeURIComponent(ARTISTA)}&titolo=${encodeURIComponent(TITOLO)}`).then(r => r.json()).catch(() => ({ fatte: [], dischi: [] }));
+  const r = await fetch(`/api/libreria/disco?artista=${encodeURIComponent(ARTISTA)}&titolo=${encodeURIComponent(TITOLO)}`).then(r => r.json()).catch(() => ({ dischi: [] }));
   const el = $("disco");
   el.textContent = "";
-  if (r.fatte.length) {
-    el.innerHTML = `<span class="ok">✓ Il disco c'è, già con le tracce separate.</span>`;
-    const b = document.createElement("button"); b.className = "primario"; b.textContent = "Suona sul disco vero";
-    b.onclick = () => usa({ id: r.fatte[0].id });
+  if (!r.dischi.length) { el.innerHTML = `<span class="nota">Questa canzone non c'è nella tua musica: la tablatura si può solo leggere.</span>`; return; }
+  el.innerHTML = `<span class="nota">Il disco c'è:</span>`;
+  for (const d of r.dischi.slice(0, 4)) {
+    const b = document.createElement("button"); b.className = el.querySelector("button") ? "" : "primario";
+    b.textContent = "▶ Suona sul disco: " + d.percorso.split("/").slice(-2).join(" / ");
+    b.onclick = () => suonaSul(d.percorso);
     el.append(b);
-  } else if (r.dischi.length) {
-    el.innerHTML = `<span class="nota">Il disco c'è in Musica, ma le tracce non sono ancora separate:</span>`;
-    for (const d of r.dischi.slice(0, 3)) {
-      const b = document.createElement("button"); b.textContent = "Usa " + d.percorso.split("/").slice(-2).join(" / ");
-      b.onclick = () => usa({ percorso: d.percorso });
-      el.append(b);
-    }
-  } else {
-    el.innerHTML = `<span class="nota">Il disco non c'è in Musica: suona con gli strumenti di Guitar Pro.</span>`;
   }
 })();
 </script>

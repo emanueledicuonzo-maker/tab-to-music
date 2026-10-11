@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="it">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tablatura</title>
+<style>
+  :root { color-scheme: dark; --fondo: #06060b; --pannello: #ffffff08; --bordo: #ffffff14; --testo: #eef0f6; --tenue: #9aa0b4;
+          --acceso: #ffb020; --rosa: #ff3d81; --ciano: #2de2e6; --verde: #6bffa0; }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { background: radial-gradient(1200px 600px at 15% -10%, #ff3d811c, transparent 60%),
+                     radial-gradient(1000px 500px at 95% 0%, #2de2e61c, transparent 60%), var(--fondo); background-attachment: fixed; min-height: 100%; }
+  body { margin: 0; padding: 0 28px 80px; font: 15px/1.5 system-ui, "Ubuntu", sans-serif; color: var(--testo); }
+  #alone { position: fixed; inset: -10%; z-index: -1; background-size: cover; background-position: center;
+           filter: blur(90px) saturate(1.6); opacity: .2; pointer-events: none; }
+  button { font: inherit; padding: 8px 14px; border: 1px solid var(--bordo); border-radius: 10px; color: var(--testo);
+           background: var(--pannello); cursor: pointer; }
+  button:hover { border-color: #ffffff33; }
+  button.attivo { border-color: var(--acceso); color: var(--acceso); box-shadow: inset 0 0 12px #ffb02022; }
+  button.primario { background: linear-gradient(135deg, var(--acceso), var(--rosa)); border: 0; color: #111; font-weight: 700; }
+  .testata { display: flex; gap: 22px; align-items: center; padding: 26px 0 14px; }
+  #copertina { width: 120px; height: 120px; border-radius: 14px; object-fit: cover; box-shadow: 0 18px 50px #000a, 0 0 0 1px #ffffff1a; }
+  .etichetta { font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: var(--tenue); }
+  .etichetta b { color: var(--ciano); }
+  h1 { font-size: clamp(22px, 2.6vw, 38px); margin: 6px 0 0; font-weight: 800; line-height: 1.1;
+       background: linear-gradient(90deg, #fff, #ffd38a 55%, #ff9bc0); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  #album { color: var(--tenue); margin-top: 4px; }
+  .riquadro { margin: 10px 0; padding: 12px 16px; border-radius: 14px; border: 1px solid var(--bordo); background: var(--pannello);
+              display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .riquadro .nota { color: var(--tenue); }
+  .riquadro .ok { color: var(--verde); font-weight: 700; }
+  #giusta.attivo { border-color: var(--verde); color: var(--verde); }
+  .trasporto { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 16px;
+               margin: 12px -16px; border-radius: 16px; background: #0b0b14cc; backdrop-filter: blur(14px); border: 1px solid var(--bordo); }
+  #via { width: 52px; height: 52px; border-radius: 50%; padding: 0; font-size: 20px; border: 0; color: #111;
+         background: linear-gradient(135deg, var(--acceso), var(--rosa)); box-shadow: 0 0 24px #ff3d8166; }
+  #scorri { flex: 1; min-width: 160px; accent-color: var(--acceso); }
+  #tempo { font: 600 15px ui-monospace, monospace; color: var(--tenue); min-width: 110px; }
+  #stato { color: var(--tenue); font-size: 13px; width: 100%; }
+  #tracce { position: sticky; top: 96px; z-index: 4; display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 0; margin-bottom: 8px;
+            background: linear-gradient(#06060bf0, #06060bd0); backdrop-filter: blur(8px); }
+  .strumento { display: flex; align-items: center; gap: 10px; padding: 8px 14px; text-align: left; }
+  .strumento .icona { font-size: 22px; }
+  .strumento small { display: block; color: var(--tenue); font-size: 11px; }
+  .strumento.attivo { border-color: var(--acceso); background: #ffb0201a; }
+  #alphaTab { background: #0b0b14; border: 1px solid var(--bordo); border-radius: 14px; padding: 10px; min-height: 300px; }
+  #alphaTab .at-cursor-bar { background: #ffb02022; }
+  #alphaTab .at-cursor-beat { background: var(--acceso); width: 3px; box-shadow: 0 0 12px var(--acceso); }
+  #alphaTab .at-highlight * { fill: var(--acceso); stroke: var(--acceso); }
+  dialog { border: 1px solid var(--bordo); border-radius: 16px; background: #0d0d16f2; color: inherit; width: min(720px, 94vw); padding: 0; }
+  dialog::backdrop { background: #000a; }
+  .dTesta { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--bordo); }
+  .dTesta .chiudi { border: 0; background: transparent; font-size: 22px; color: var(--tenue); }
+  #candidati { display: flex; flex-direction: column; gap: 6px; padding: 12px 18px; max-height: 50vh; overflow: auto; }
+  .candidato { text-align: left; display: flex; flex-direction: column; }
+  .candidato small { color: var(--tenue); } .candidato.ha small { color: var(--verde); }
+  .carica { display: block; padding: 12px 18px 18px; color: var(--tenue); font-size: 13px; }
+  .carica input { display: block; margin-top: 8px; color: var(--testo); }
+</style>
+<div id="alone"></div>
+<section class="testata">
+  <img id="copertina" alt="" hidden>
+  <div>
+    <div class="etichetta">Libreria · <b id="artista"></b></div>
+    <h1 id="titolo">…</h1>
+    <div id="album"></div>
+  </div>
+</section>
+
+<div class="riquadro" id="tabInfo"><span class="nota">Cerco la tablatura…</span></div>
+<div class="riquadro" id="tracceInfo" hidden></div>
+
+<audio id="disco" preload="auto"></audio>
+<div class="trasporto" id="trasporto" hidden>
+  <button id="via" title="Suona / ferma (spazio)">▶</button>
+  <input id="scorri" type="range" min="0" max="1000" value="0">
+  <span id="tempo">0:00</span>
+  <button data-v="0.5">0,5×</button><button data-v="0.75">0,75×</button><button data-v="1" class="attivo">1×</button>
+  <button id="prima" title="Tutta la tablatura un decimo di secondo prima">−0,1 s</button>
+  <button id="dopo" title="Tutta la tablatura un decimo di secondo dopo">+0,1 s</button>
+  <button id="rifai" title="Rifà la sincronia automatica, buttando le correzioni">Risincronizza</button>
+  <span id="stato"></span>
+</div>
+<div id="tracce"></div>
+<div id="alphaTab"></div>
+
+<dialog id="dScegli">
+  <div class="dTesta"><b>Scegli la tablatura</b><button class="chiudi" aria-label="Chiudi">×</button></div>
+  <div id="candidati"></div>
+  <label class="carica">…oppure carica una tablatura scaricata da te (.gp, .gpx, .gp5, .gp4, .gp3)
+    <input type="file" id="file" accept=".gp,.gpx,.gp5,.gp4,.gp3,.gtp"></label>
+</dialog>
+
+<script type="module">
+import * as alphaTab from "/pwa/alphatab/alphaTab.min.mjs";
+const $ = id => document.getElementById(id);
+const PERCORSO = new URLSearchParams(location.search).get("percorso");
+const P = encodeURIComponent(PERCORSO);
+const disco = $("disco");
+const orologio = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+const FAMIGLIE = ["Pianoforte", "Percussioni", "Organo", "Chitarra", "Basso", "Archi", "Archi", "Ottoni",
+                  "Fiati", "Flauti", "Synth", "Synth", "Effetti", "Etnici", "Percussioni", "Effetti"];
+const ICONE = { Pianoforte: "🎹", Organo: "🎹", Chitarra: "🎸", Basso: "🎸", Batteria: "🥁", Archi: "🎻", Ottoni: "🎺",
+                Fiati: "🎷", Flauti: "🪈", Synth: "🎛️", Voce: "🎤" };
+const strumentoDi = t => t.playbackInfo?.primaryChannel === 9 || t.staves[0]?.isPercussion ? "Batteria"
+  : /voc|voz|voix|voice|vox|sing|canto|coro|choir/i.test(t.name || "") ? "Voce"
+  : FAMIGLIE[Math.floor((t.playbackInfo?.program ?? 0) / 8)] || "Strumento";
+
+const info = await fetch(`/api/disco/info?percorso=${P}`).then(r => r.json());
+const v = info.voce;
+$("titolo").textContent = v.titolo; $("artista").textContent = v.artista; $("album").textContent = v.album;
+document.title = `${v.titolo} — Tablatura`;
+$("copertina").src = `/api/disco/copertina?percorso=${P}`;
+$("copertina").onload = () => { $("copertina").hidden = false; $("alone").style.backgroundImage = `url('${$("copertina").src}')`; };
+disco.src = `/disco/audio?percorso=${P}`;
+disco.preservesPitch = true;
+
+// ---------------------------------------------------------------- la tablatura scelta
+function mostraTab() {
+  const el = $("tabInfo");
+  el.textContent = "";
+  if (!info.tablatura) {
+    el.innerHTML = `<span class="nota">Per questa canzone non ho trovato una tablatura Guitar Pro.</span>`;
+    const scegli = document.createElement("button"); scegli.textContent = "Carica la tua…"; scegli.onclick = apriScelta;
+    const importa = document.createElement("button"); importa.textContent = "Importa (bozza automatica)";
+    importa.title = "Il programma ascolta il disco e scrive una tablatura sua: una bozza, utile quando la tablatura vera non c'è";
+    importa.onclick = separa;
+    el.append(scegli, importa);
+    return;
+  }
+  const t = info.tablatura;
+  const nome = (t.nome || "").split("/").pop();
+  el.innerHTML = `<span class="nota">Tablatura: <b style="color:var(--testo)"></b></span>`;
+  el.querySelector("b").textContent = nome + (t.tua ? " (tua)" : "");
+  const giusta = document.createElement("button"); giusta.id = "giusta";
+  giusta.textContent = t.scelta ? "✓ È questa (segnata)" : "✓ È questa";
+  giusta.classList.toggle("attivo", !!t.scelta);
+  giusta.title = "Segna questa tablatura per questo disco: si aprirà sempre lei";
+  giusta.onclick = async () => {
+    if (t.tua) return;
+    await fetch("/api/disco/scegli", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ percorso: PERCORSO, archivio: t.archivio, nome: t.nome }) });
+    t.scelta = true; giusta.textContent = "✓ È questa (segnata)"; giusta.classList.add("attivo");
+  };
+  const cambia = document.createElement("button"); cambia.textContent = "Cambia…"; cambia.onclick = apriScelta;
+  el.append(giusta, cambia);
+}
+async function apriScelta() {
+  $("dScegli").showModal();
+  const el = $("candidati");
+  el.innerHTML = "<p>Cerco negli archivi…</p>";
+  const lista = await fetch(`/api/disco/candidati?percorso=${P}`).then(r => r.json()).catch(() => []);
+  el.textContent = "";
+  if (!lista.length) el.innerHTML = "<p>Negli archivi non c'è: carica una tablatura scaricata da te.</p>";
+  for (const c of lista) {
+    const b = document.createElement("button");
+    b.className = "candidato" + (c.ha ? " ha" : "");
+    b.innerHTML = "<b></b><small></small>";
+    b.querySelector("b").textContent = c.nome.split("/").pop();
+    b.querySelector("small").textContent = (c.ha ? "✓ " : "") + (c.strumenti || []).join(", ");
+    b.onclick = async () => {
+      await fetch("/api/disco/scegli", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ percorso: PERCORSO, archivio: c.archivio, nome: c.nome }) });
+      location.reload();
+    };
+    el.append(b);
+  }
+}
+$("file").onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  await fetch(`/api/disco/carica?percorso=${P}&nome=${encodeURIComponent(f.name)}`, { method: "POST", body: await f.arrayBuffer() });
+  location.reload();
+};
+document.querySelector("#dScegli .chiudi").onclick = () => $("dScegli").close();
+
+// ---------------------------------------------------------------- tracce separate
+async function separa() {
+  const r = await fetch("/api/disco/separa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ percorso: PERCORSO }) }).then(r => r.json());
+  aspetta(r.inLavorazione);
+}
+function aspetta(id) {
+  const el = $("tracceInfo"); el.hidden = false;
+  el.innerHTML = `<span class="nota">Sto lavorando il disco (3-4 minuti): tracce separate${info.tablatura ? "" : ", tablatura automatica"} e testo.</span>`;
+  const giro = setInterval(async () => {
+    const { coda } = await fetch("/api/stato").then(r => r.json());
+    const l = coda.find(l => `${l.album}/${l.titolo}` === id);
+    if (l && l.stato === "fatta") { clearInterval(giro); info.fatta = id; mostraTracce(); }
+    if (l && l.stato === "errore") { clearInterval(giro); el.innerHTML = `<span class="nota">Il lavoro sul disco non è riuscito.</span>`; }
+  }, 3000);
+}
+function mostraTracce() {
+  const el = $("tracceInfo"); el.hidden = false; el.textContent = "";
+  if (info.fatta) {
+    el.innerHTML = `<span class="ok">✓ Tracce separate pronte.</span>`;
+    const b = document.createElement("button"); b.className = "primario"; b.textContent = "Apri col mixer delle tracce";
+    b.title = "Basso, batteria, voce e resto separati: mute e solo sul disco vero";
+    b.onclick = () => { try { localStorage.setItem("vista", info.tablatura ? "gp" : "tab"); } catch {} disco.pause();
+      window.parent.apri ? window.parent.apri(info.fatta) : (location.href = "/"); };
+    el.append(b);
+  } else if (info.tablatura) {
+    el.innerHTML = `<span class="nota">Vuoi spegnere o isolare il basso, la voce o la batteria del disco?</span>`;
+    const b = document.createElement("button"); b.textContent = "Separa le tracce"; b.onclick = separa; el.append(b);
+  }
+}
+mostraTab(); mostraTracce();
+
+// ---------------------------------------------------------------- tablatura e sincronia
+if (info.tablatura) {
+  $("trasporto").hidden = false;
+  $("stato").textContent = "Carico la tablatura…";
+  const at = new alphaTab.AlphaTabApi($("alphaTab"), {
+    core: { fontDirectory: "/pwa/alphatab/font/" },
+    display: { staveProfile: alphaTab.StaveProfile.Tab, resources: { mainGlyphColor: "#d9dcea", secondaryGlyphColor: "#9aa0b4",
+               staffLineColor: "#ffffff33", barSeparatorColor: "#ffffff44", scoreInfoColor: "#eef0f6" } },
+    player: { playerMode: alphaTab.PlayerMode.EnabledExternalMedia, enableCursor: true, enableAnimatedBeatCursor: true,
+              enableUserInteraction: true, scrollMode: alphaTab.ScrollMode.Continuous, scrollOffsetY: -200 },
+  });
+  window.at = at;
+  let score = null, tempi = [], punti = [], vista = 0;
+  at.playerReady.on(() => {
+    at.player.output.handler = {
+      get backingTrackDuration() { return (disco.duration || 0) * 1000; },
+      get playbackRate() { return disco.playbackRate; }, set playbackRate(x) {},
+      get masterVolume() { return disco.volume; }, set masterVolume(x) {},
+      seekTo(ms) { disco.currentTime = ms / 1000; },
+      play() { disco.play(); }, pause() { disco.pause(); },
+    };
+  });
+  fetch(`/api/disco/gp?percorso=${P}`).then(r => r.arrayBuffer()).then(b => at.load(new Uint8Array(b)));
+
+  // Le battute nell'ordine in cui si suonano (con i ritornelli), al tempo scritto.
+  function tempiDelFile(s) {
+    const fuori = []; let bpm = s.tempo || 120, t = 0, i = 0, inizio = 0; const giri = new Map();
+    while (i < s.masterBars.length && fuori.length < 5000) {
+      const mb = s.masterBars[i];
+      if (mb.isRepeatStart) inizio = i;
+      for (const a of mb.tempoAutomations || []) bpm = a.value || bpm;
+      const durata = mb.calculateDuration() / 960 * 60000 / bpm;
+      fuori.push({ bar: i, occ: fuori.filter(x => x.bar === i).length, inizio: t, durata });
+      t += durata;
+      if (mb.repeatCount > 0) { const f = giri.get(i) || 0; if (f < mb.repeatCount - 1) { giri.set(i, f + 1); i = inizio; continue; } giri.delete(i); }
+      i++;
+    }
+    return fuori;
+  }
+  function eventiDelFile() {
+    // Le note di tutti gli strumenti (non la batteria), al tempo scritto.
+    const eventi = [];
+    for (const o of tempi) {
+      const durataBar = score.masterBars[o.bar].calculateDuration();
+      for (const tr of score.tracks) {
+        if (strumentoDi(tr) === "Batteria") continue;
+        const bar = tr.staves[0].bars[o.bar]; if (!bar) continue;
+        for (const voce of bar.voices) for (const beat of voce.beats) {
+          if (beat.isRest) continue;
+          for (const n of beat.notes) eventi.push({
+            inizio: o.inizio + beat.playbackStart / durataBar * o.durata,
+            durata: beat.playbackDuration / durataBar * o.durata, midi: n.realValue });
+        }
+      }
+    }
+    return eventi;
+  }
+  function applica(nuovi, salva) {
+    punti = nuovi;
+    score.applyFlatSyncPoints(punti);
+    at.updateSyncPoints();
+    if (salva) fetch("/api/disco/sincronia", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ percorso: PERCORSO, punti }) });
+  }
+  async function sincronizza(forza) {
+    const salvata = forza ? {} : await fetch(`/api/disco/sincronia?percorso=${P}`).then(r => r.json()).catch(() => ({}));
+    if (salvata.punti) { applica(salvata.punti, false); $("stato").textContent = "Sincronia salvata (con le tue correzioni)."; return; }
+    let ms = salvata.automatica;
+    if (!ms) {
+      $("stato").textContent = "Sincronizzo la tablatura col disco…";
+      const r = await fetch("/api/allinea", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ percorso: PERCORSO, eventi: eventiDelFile(), battute: tempi.map(o => o.inizio) }) }).then(r => r.json());
+      ms = r.automatica;
+    }
+    applica(tempi.map((o, k) => ({ barIndex: o.bar, barOccurence: o.occ, barPosition: 0, millisecondOffset: ms[k] })), false);
+    $("stato").textContent = "Sincronizzata col disco. Se una battuta parte storta: mentre suona, cliccala nel momento giusto.";
+  }
+  at.scoreLoaded.on(s => {
+    score = s; tempi = tempiDelFile(s);
+    vista = Math.max(0, s.tracks.findIndex(t => strumentoDi(t) === "Basso"));
+    disegnaStrumenti();
+    at.renderTracks([s.tracks[vista]]);
+    if (disco.readyState >= 1) sincronizza(); else disco.addEventListener("loadedmetadata", () => sincronizza(), { once: true });
+  });
+  function disegnaStrumenti() {
+    const el = $("tracce"); el.textContent = "";
+    score.tracks.forEach((t, i) => {
+      const tipo = strumentoDi(t);
+      const b = document.createElement("button");
+      b.className = "strumento" + (i === vista ? " attivo" : "");
+      b.innerHTML = `<span class="icona">${ICONE[tipo] || "🎵"}</span><span><b></b><small></small></span>`;
+      b.querySelector("b").textContent = t.name?.trim() || tipo;
+      b.querySelector("small").textContent = t.name?.trim() ? tipo : `traccia ${i + 1}`;
+      b.onclick = () => { vista = i; disegnaStrumenti(); at.renderTracks([t]); applica(punti, false); };
+      el.append(b);
+    });
+  }
+  // Correzione a mano: mentre suona, un clic su una battuta dice «comincia adesso».
+  at.beatMouseDown.on(beat => {
+    if (!punti.length || disco.paused) return;
+    const bar = beat.voice.bar.index, adesso = disco.currentTime * 1000;
+    let k = -1, d = Infinity;
+    punti.forEach((p, i) => { if (p.barIndex === bar && Math.abs(p.millisecondOffset - adesso) < d) { k = i; d = Math.abs(p.millisecondOffset - adesso); } });
+    if (k < 0) return;
+    const delta = adesso - punti[k].millisecondOffset;
+    applica(punti.map((p, i) => (i >= k ? { ...p, millisecondOffset: Math.max(0, p.millisecondOffset + delta) } : p)), true);
+    $("stato").textContent = `Battuta ${bar + 1} agganciata a ${orologio(adesso / 1000)}.`;
+  });
+  $("prima").onclick = () => applica(punti.map(p => ({ ...p, millisecondOffset: Math.max(0, p.millisecondOffset - 100) })), true);
+  $("dopo").onclick = () => applica(punti.map(p => ({ ...p, millisecondOffset: p.millisecondOffset + 100 })), true);
+  $("rifai").onclick = () => sincronizza(true);
+
+  $("via").onclick = () => (disco.paused ? (disco.play(), at.play()) : (disco.pause(), at.pause()));
+  disco.onplay = () => { $("via").textContent = "⏸"; };
+  disco.onpause = () => { $("via").textContent = "▶"; };
+  $("scorri").oninput = () => { disco.currentTime = $("scorri").value / 1000 * (disco.duration || 0); };
+  for (const b of document.querySelectorAll("[data-v]")) b.onclick = () => {
+    disco.playbackRate = Number(b.dataset.v);
+    document.querySelectorAll("[data-v]").forEach(x => x.classList.toggle("attivo", x === b));
+  };
+  addEventListener("keydown", e => { if (e.code === "Space" && !/INPUT|BUTTON/.test(document.activeElement.tagName)) { e.preventDefault(); $("via").click(); } });
+  const giro = () => {
+    const t = disco.currentTime;
+    try { at.player?.output?.updatePosition?.(t * 1000); } catch {}
+    $("tempo").textContent = `${orologio(t)} / ${orologio(disco.duration || 0)}`;
+    if (disco.duration) $("scorri").value = Math.round(t / disco.duration * 1000);
+    requestAnimationFrame(giro);
+  };
+  requestAnimationFrame(giro);
+}
+</script>
+</html>

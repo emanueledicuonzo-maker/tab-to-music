@@ -18,13 +18,14 @@ import re
 import subprocess
 import sys
 import threading
+import hashlib
 import time
 import urllib.parse
 from dataclasses import asdict, dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import copertina, guitarpro, online
+from . import allinea, copertina, guitarpro, libreria, online
 from .strumenti import STRUMENTI
 from .visore import pagina
 
@@ -97,6 +98,53 @@ RUMORE = re.compile(r"^\d{4}-\d\d-\d\d|^[EWI]\d{4}|tensorflow|cuda|cudnn|cublas|
 # percorso del file audio → (archivio, nome nello zip).
 da_collegare: dict[str, tuple[str, str]] = {}
 CARTELLE_DISCHI = [MUSICA, Path.home() / "Scaricati"]
+
+TUE = TAB / "_tablature_tue"          # i file Guitar Pro caricati da te
+SINCRONIE = FILE_STATO.parent / "sincronie"
+_indice = {"quando": 0.0, "voci": []}
+
+
+def indice_musica() -> list[dict]:
+    """L'elenco di tutta la musica, rifatto al massimo una volta al minuto."""
+    if time.monotonic() - _indice["quando"] > 60:
+        _indice["voci"] = libreria.aggiorna(CARTELLE_DISCHI, [TAB])
+        _indice["quando"] = time.monotonic()
+    return _indice["voci"]
+
+
+def disco_permesso(percorso: str) -> Path | None:
+    p = Path(percorso).resolve()
+    if p.suffix.lower() in libreria.AUDIO and p.is_file() and any(c.resolve() in p.parents for c in CARTELLE_DISCHI):
+        return p
+    return None
+
+
+def voce_di(percorso: str) -> dict:
+    return next((v for v in indice_musica() if v["percorso"] == percorso), None) or {
+        "percorso": percorso, "artista": "", "titolo": Path(percorso).stem, "album": Path(percorso).parent.name, "durata": 0}
+
+
+def id_fatta(percorso: str) -> str | None:
+    p = Path(percorso)
+    return f"{p.parent.name}/{p.stem}" if (TAB / p.parent.name / p.stem / "leggio.json").is_file() else None
+
+
+def tablatura_del_disco(percorso: str) -> dict | None:
+    """La tablatura per questo disco: quella scelta da te, o la migliore dell'archivio."""
+    scelte = leggi_stato().get("tabPerDisco", {})
+    if percorso in scelte:
+        return scelte[percorso] | {"scelta": True}
+    v = voce_di(percorso)
+    candidati = guitarpro.cerca(v["titolo"], v["artista"], MUSICA, quante=1)
+    return (candidati[0] | {"scelta": False}) if candidati else None
+
+
+def chiave_sincronia(percorso: str, tab: dict) -> Path:
+    import hashlib
+
+    firma = percorso + "|" + (tab.get("tua") or f"{tab.get('archivio')}|{tab.get('nome')}")
+    return SINCRONIE / (hashlib.sha1(firma.encode()).hexdigest()[:16] + ".json")
+
 
 coda: list[Lavoro] = []
 serratura = threading.Lock()
@@ -311,6 +359,47 @@ class Risponditore(BaseHTTPRequestHandler):
                 if (cartella / "leggio.json").is_file():
                     fatte.append({"id": f"{p.parent.name}/{p.stem}", "percorso": d["percorso"]})
             return self.json({"fatte": fatte, "dischi": dischi})
+        if percorso == "/api/musica/artisti":
+            return self.json(libreria.artisti(indice_musica()))
+        if percorso == "/api/musica/canzoni":
+            canzoni = libreria.canzoni(indice_musica(), domanda.get("chiave", ""))
+            return self.json([c | {"fatta": id_fatta(c["percorso"])} for c in canzoni])
+        if percorso == "/libreria/disco":
+            return self.manda(Path(__file__).with_name("disco.html").read_bytes(), "text/html; charset=utf-8")
+        if percorso == "/disco/audio":
+            p = disco_permesso(domanda.get("percorso", ""))
+            return self.file_a_pezzi(p) if p else self.manda(b"no", "text/plain", 403)
+        if percorso == "/api/disco/info":
+            p = domanda.get("percorso", "")
+            if not disco_permesso(p):
+                return self.json({"errore": "disco sconosciuto"}, 404)
+            v = voce_di(p)
+            return self.json({"voce": v, "tablatura": tablatura_del_disco(p), "fatta": id_fatta(p)})
+        if percorso == "/api/disco/candidati":
+            v = voce_di(domanda.get("percorso", ""))
+            return self.json(guitarpro.cerca(v["titolo"], v["artista"], MUSICA))
+        if percorso == "/api/disco/gp":
+            p = domanda.get("percorso", "")
+            tab = tablatura_del_disco(p) if disco_permesso(p) else None
+            if not tab:
+                return self.manda(b"", "application/octet-stream", 404)
+            dati = Path(tab["tua"]).read_bytes() if tab.get("tua") else guitarpro.leggi(MUSICA, tab["archivio"], tab["nome"])
+            return self.manda(dati, "application/octet-stream")
+        if percorso == "/api/disco/sincronia":
+            p = domanda.get("percorso", "")
+            tab = tablatura_del_disco(p) if disco_permesso(p) else None
+            file = chiave_sincronia(p, tab) if tab else None
+            try:
+                return self.json(json.loads(file.read_text()) if file else {})
+            except (OSError, ValueError):
+                return self.json({})
+        if percorso == "/api/disco/copertina":
+            p = disco_permesso(domanda.get("percorso", ""))
+            immagine = copertina.trova(p) if p else None
+            if immagine:
+                return self.manda(immagine.read_bytes(), mimetypes.guess_type(immagine.name)[0] or "image/jpeg",
+                                  altre={"Cache-Control": "max-age=3600"})
+            return self.manda(b"", "image/png", 404)
         if percorso == "/api/suoni":
             tuoi = sorted(p for p in MUSICA.glob("*.sf[23]") if p.is_file())
             if tuoi:
@@ -362,6 +451,60 @@ class Risponditore(BaseHTTPRequestHandler):
                 return self.json({"errore": "canzone sconosciuta"}, 404)
             guitarpro.estrai(cartella, MUSICA, dati["archivio"], dati["nome"])
             return self.json({"ok": True})
+        if url.path == "/api/disco/scegli":
+            # La tablatura giusta per questo disco, scelta da te: vale per sempre.
+            stato = leggi_stato()
+            scelte = stato.get("tabPerDisco", {})
+            scelte[dati["percorso"]] = {"archivio": dati["archivio"], "nome": dati["nome"]}
+            salva_stato(tabPerDisco=scelte)
+            return self.json({"ok": True})
+        if url.path == "/api/disco/carica":
+            p = domanda.get("percorso", "")
+            estensione = Path(domanda.get("nome", "")).suffix.lower()
+            if not disco_permesso(p) or estensione not in guitarpro.ESTENSIONI:
+                return self.json({"errore": "file non valido"}, 400)
+            TUE.mkdir(parents=True, exist_ok=True)
+            file = TUE / (hashlib.sha1(p.encode()).hexdigest()[:12] + "-" + Path(domanda["nome"]).name)
+            file.write_bytes(dati_grezzi)
+            scelte = leggi_stato().get("tabPerDisco", {})
+            scelte[p] = {"tua": str(file), "nome": Path(domanda["nome"]).name}
+            salva_stato(tabPerDisco=scelte)
+            return self.json({"ok": True})
+        if url.path == "/api/allinea":
+            p = disco_permesso(dati.get("percorso", ""))
+            tab = tablatura_del_disco(str(p)) if p else None
+            if not tab:
+                return self.json({"errore": "niente da allineare"}, 400)
+            ms = allinea.sincronizza(p, dati["eventi"], dati["battute"])
+            file = chiave_sincronia(str(p), tab)
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.write_text(json.dumps({"automatica": ms}))
+            return self.json({"automatica": ms})
+        if url.path == "/api/disco/sincronia":
+            p = disco_permesso(dati.get("percorso", ""))
+            tab = tablatura_del_disco(str(p)) if p else None
+            if not tab:
+                return self.json({"errore": "niente"}, 400)
+            file = chiave_sincronia(str(p), tab)
+            vecchia = {}
+            try:
+                vecchia = json.loads(file.read_text())
+            except (OSError, ValueError):
+                pass
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.write_text(json.dumps(vecchia | {"punti": dati["punti"]}))
+            return self.json({"ok": True})
+        if url.path == "/api/disco/separa":
+            # Le tracce separate (mute e solo sul disco vero), con la tablatura già collegata.
+            p = disco_permesso(dati.get("percorso", ""))
+            if not p:
+                return self.json({"errore": "disco sconosciuto"}, 404)
+            tab = tablatura_del_disco(str(p))
+            if tab and not tab.get("tua"):
+                da_collegare[str(p)] = (tab["archivio"], tab["nome"])
+            preferenze = leggi_stato()
+            accoda([str(p)], dati.get("strumento", "basso"), preferenze.get("testo", True), preferenze.get("lingua", "en"))
+            return self.json({"inLavorazione": f"{p.parent.name}/{p.stem}"})
         if url.path == "/api/libreria/usa":
             # Una tablatura dell'archivio sul disco vero: se la canzone è già
             # lavorata la si collega subito, se no si lavora e la si collega dopo.
