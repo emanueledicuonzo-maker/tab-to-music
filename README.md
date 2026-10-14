@@ -28,7 +28,7 @@ Pick a song from your own music library: Tab to Music finds a matching Guitar Pr
 Requirements: Python 3.11 (Basic Pitch does not support newer versions yet), `ffmpeg`, `unzip`, Google Chrome or Chromium. An NVIDIA GPU makes stem separation ~5-10× faster but is not required.
 
 ```bash
-git clone https://github.com/emanueledicuonzo-maker/tab-to-music.git
+git clone https://github.com/getaweb-it/tab-to-music.git
 cd tab-to-music
 python3.11 -m venv .venv-311
 .venv-311/bin/pip install -r requirements.txt
